@@ -1,16 +1,20 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl
 
+import scala.concurrent.ExecutionContext
 import akka.http.scaladsl.model.HttpRequest
 import akka.http.scaladsl.settings.ClientConnectionSettings
 import akka.http.scaladsl.settings.ConnectionPoolSettings
+import com.github.ghik.silencer.silent
 import docs.CompileOnlySpec
-import org.scalatest.{ Matchers, WordSpec }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec {
+@silent("will not be a runnable program")
+class HttpClientExampleSpec extends AnyWordSpec with Matchers with CompileOnlySpec {
 
   "manual-entity-consume-example-1" in compileOnlySpec {
     //#manual-entity-consume-example-1
@@ -18,13 +22,10 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
 
     import akka.actor.ActorSystem
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
     import akka.stream.scaladsl.{ FileIO, Framing }
     import akka.util.ByteString
 
     implicit val system = ActorSystem()
-    implicit val dispatcher = system.dispatcher
-    implicit val materializer = ActorMaterializer()
 
     val response: HttpResponse = ???
 
@@ -45,12 +46,10 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
 
     import akka.actor.ActorSystem
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
     import akka.util.ByteString
 
     implicit val system = ActorSystem()
     implicit val dispatcher = system.dispatcher
-    implicit val materializer = ActorMaterializer()
 
     case class ExamplePerson(name: String)
     def parse(line: ByteString): ExamplePerson = ???
@@ -73,20 +72,17 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
 
   "manual-entity-consume-example-3" in compileOnlySpec {
     //#manual-entity-consume-example-3
-    import scala.concurrent.duration._
     import scala.concurrent.Future
 
     import akka.NotUsed
     import akka.actor.ActorSystem
     import akka.http.scaladsl.Http
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
     import akka.util.ByteString
     import akka.stream.scaladsl.{ Flow, Sink, Source }
 
     implicit val system = ActorSystem()
     implicit val dispatcher = system.dispatcher
-    implicit val materializer = ActorMaterializer()
 
     case class ExamplePerson(name: String)
 
@@ -127,11 +123,9 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import akka.actor.ActorSystem
     import akka.http.scaladsl.model.HttpMessage.DiscardedEntity
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
 
     implicit val system = ActorSystem()
     implicit val dispatcher = system.dispatcher
-    implicit val materializer = ActorMaterializer()
 
     val response1: HttpResponse = ??? // obtained from an HTTP call (see examples below)
 
@@ -146,12 +140,10 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import akka.Done
     import akka.actor.ActorSystem
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
     import akka.stream.scaladsl.Sink
 
     implicit val system = ActorSystem()
     implicit val dispatcher = system.dispatcher
-    implicit val materializer = ActorMaterializer()
 
     //#manual-entity-discard-example-2
     val response1: HttpResponse = ??? // obtained from an HTTP call (see examples below)
@@ -159,55 +151,6 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     val discardingComplete: Future[Done] = response1.entity.dataBytes.runWith(Sink.ignore)
     discardingComplete.onComplete(done => println("Entity discarded completely!"))
     //#manual-entity-discard-example-2
-  }
-
-  "outgoing-connection-example" in compileOnlySpec {
-    //#outgoing-connection-example
-    import akka.actor.ActorSystem
-    import akka.http.scaladsl.Http
-    import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
-    import akka.stream.scaladsl._
-
-    import scala.concurrent.Future
-    import scala.util.{ Failure, Success }
-
-    object WebClient {
-      def main(args: Array[String]): Unit = {
-        implicit val system = ActorSystem()
-        implicit val materializer = ActorMaterializer()
-        implicit val executionContext = system.dispatcher
-
-        val connectionFlow: Flow[HttpRequest, HttpResponse, Future[Http.OutgoingConnection]] =
-          Http().outgoingConnection("akka.io")
-
-        def dispatchRequest(request: HttpRequest): Future[HttpResponse] =
-          // This is actually a bad idea in general. Even if the `connectionFlow` was instantiated only once above,
-          // a new connection is opened every single time, `runWith` is called. Materialization (the `runWith` call)
-          // and opening up a new connection is slow.
-          //
-          // The `outgoingConnection` API is very low-level. Use it only if you already have a `Source[HttpRequest, _]`
-          // (other than Source.single) available that you want to use to run requests on a single persistent HTTP
-          // connection.
-          //
-          // Unfortunately, this case is so uncommon, that we couldn't come up with a good example.
-          //
-          // In almost all cases it is better to use the `Http().singleRequest()` API instead.
-          Source.single(request)
-            .via(connectionFlow)
-            .runWith(Sink.head)
-
-        val responseFuture: Future[HttpResponse] = dispatchRequest(HttpRequest(uri = "/"))
-
-        responseFuture.andThen {
-          case Success(_) => println("request succeeded")
-          case Failure(_) => println("request failed")
-        }.andThen {
-          case _ => system.terminate()
-        }
-      }
-    }
-    //#outgoing-connection-example
   }
 
   "host-level-queue-example" in compileOnlySpec {
@@ -218,14 +161,12 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import akka.actor.ActorSystem
     import akka.http.scaladsl.Http
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
     import akka.stream.scaladsl._
 
     import akka.stream.{ OverflowStrategy, QueueOfferResult }
 
     implicit val system = ActorSystem()
     import system.dispatcher // to get an implicit ExecutionContext into scope
-    implicit val materializer = ActorMaterializer()
 
     val QueueSize = 10
 
@@ -266,7 +207,6 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import akka.actor.ActorSystem
     import akka.http.scaladsl.Http
     import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
     import akka.stream.scaladsl._
 
     import akka.http.scaladsl.model.Multipart.FormData
@@ -274,7 +214,6 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
 
     implicit val system = ActorSystem()
     import system.dispatcher // to get an implicit ExecutionContext into scope
-    implicit val materializer = ActorMaterializer()
 
     case class FileToUpload(name: String, location: Path)
 
@@ -324,46 +263,31 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
   }
 
   "single-request-example" in compileOnlySpec {
-    //#single-request-example
-    import akka.actor.ActorSystem
-    import akka.http.scaladsl.Http
-    import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
-
     import scala.concurrent.Future
-    import scala.util.{ Failure, Success }
-
-    object Client {
-      def main(args: Array[String]): Unit = {
-        implicit val system = ActorSystem()
-        implicit val materializer = ActorMaterializer()
-        // needed for the future flatMap/onComplete in the end
-        implicit val executionContext = system.dispatcher
-
-        val responseFuture: Future[HttpResponse] = Http().singleRequest(HttpRequest(uri = "http://akka.io"))
-
-        responseFuture
-          .onComplete {
-            case Success(res) => println(res)
-            case Failure(_)   => sys.error("something wrong")
-          }
-      }
-    }
-    //#single-request-example
-
+    import akka.actor.ActorSystem
+    import akka.http.scaladsl.model._
     //#create-simple-request
     HttpRequest(uri = "https://akka.io")
+
+    // or:
+    import akka.http.scaladsl.client.RequestBuilding.Get
+    Get("https://akka.io")
     //#create-simple-request
 
+    implicit val ec: ExecutionContext = null
     //#create-post-request
     HttpRequest(
       method = HttpMethods.POST,
       uri = "https://userservice.example/users",
       entity = HttpEntity(ContentTypes.`text/plain(UTF-8)`, "data")
     )
+
+    // or:
+    import akka.http.scaladsl.client.RequestBuilding.Post
+    Post("https://userservice.example/users", "data")
     //#create-post-request
 
-    implicit val materializer: ActorMaterializer = null
+    implicit val system: ActorSystem = null
     val response: HttpResponse = null
     //#unmarshal-response-body
     import akka.http.scaladsl.unmarshalling.Unmarshal
@@ -382,7 +306,6 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import akka.actor.{ Actor, ActorLogging }
     import akka.http.scaladsl.Http
     import akka.http.scaladsl.model._
-    import akka.stream.{ ActorMaterializer, ActorMaterializerSettings }
     import akka.util.ByteString
 
     class Myself extends Actor
@@ -391,9 +314,8 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
       import akka.pattern.pipe
       import context.dispatcher
 
-      final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
-
-      val http = Http(context.system)
+      implicit val system = context.system
+      val http = Http(system)
 
       override def preStart() = {
         http.singleRequest(HttpRequest(uri = "http://akka.io"))
@@ -419,11 +341,9 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import java.net.InetSocketAddress
 
     import akka.actor.ActorSystem
-    import akka.stream.ActorMaterializer
     import akka.http.scaladsl.{ ClientTransport, Http }
 
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
 
     val proxyHost = "localhost"
     val proxyPort = 8888
@@ -441,11 +361,9 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     import java.net.InetSocketAddress
 
     import akka.actor.ActorSystem
-    import akka.stream.ActorMaterializer
     import akka.http.scaladsl.{ ClientTransport, Http }
 
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
 
     val proxyHost = "localhost"
     val proxyPort = 8888
@@ -465,34 +383,4 @@ class HttpClientExampleSpec extends WordSpec with Matchers with CompileOnlySpec 
     //#auth-https-proxy-example-single-request
   }
 
-  "collecting_headers-example-for-single-request" in compileOnlySpec {
-    //#collecting-headers-example
-    import akka.actor.ActorSystem
-    import akka.http.scaladsl.Http
-    import akka.http.scaladsl.model.headers.`Set-Cookie`
-    import akka.http.scaladsl.model._
-    import akka.stream.ActorMaterializer
-
-    import scala.concurrent.ExecutionContextExecutor
-    import scala.concurrent.Future
-
-    object Client {
-      def main(args: Array[String]): Unit = {
-        implicit val system: ActorSystem = ActorSystem()
-        implicit val materializer: ActorMaterializer = ActorMaterializer()
-        implicit val executionContext: ExecutionContextExecutor = system.dispatcher
-
-        val responseFuture: Future[HttpResponse] = Http().singleRequest(HttpRequest(uri = "http://akka.io"))
-
-        responseFuture.map {
-          case response @ HttpResponse(StatusCodes.OK, _, _, _) =>
-            val setCookies = response.headers[`Set-Cookie`]
-            println(s"Cookies set by a server: $setCookies")
-            response.discardEntityBytes()
-          case _ => sys.error("something wrong")
-        }
-      }
-    }
-    //#collecting-headers-example
-  }
 }

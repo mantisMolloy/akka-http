@@ -1,11 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.server
 
 import java.net.{ InetAddress, InetSocketAddress }
 
+import akka.event.LoggingAdapter
+import akka.http.ParsingErrorHandler
 import akka.http.impl.engine.ws.ByteStringSinkProbe
 import akka.http.impl.util._
 import akka.http.scaladsl.Http.ServerLayer
@@ -33,12 +35,16 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
 
+object TestParsingErrorHandler extends ParsingErrorHandler {
+  override def handle(status: StatusCode, error: ErrorInfo, log: LoggingAdapter, settings: ServerSettings): HttpResponse =
+    HttpResponse(StatusCodes.ImATeapot, entity = HttpEntity("Tea hea"))
+}
+
 class HttpServerSpec extends AkkaSpec(
   """akka.loggers = ["akka.http.impl.util.SilenceAllTestEventListener"]
      akka.loglevel = DEBUG
      akka.http.server.log-unencrypted-network-bytes = 100
      akka.http.server.request-timeout = infinite
-     akka.scheduler.implementation = "akka.testkit.ExplicitlyTriggeredScheduler"
   """) with Inside with WithLogCapturing { spec =>
   implicit val materializer = ActorMaterializer()
 
@@ -359,8 +365,6 @@ class HttpServerSpec extends AkkaSpec(
     })
 
     "close the connection if request entity stream has been cancelled" in assertAllStagesStopped(new TestSetup {
-      override def settings: ServerSettings = super.settings.mapTimeouts(_.withLingerTimeout(10.millis))
-
       // two chunks sent by client
       send("""POST / HTTP/1.1
              |Host: example.com
@@ -374,6 +378,8 @@ class HttpServerSpec extends AkkaSpec(
              |
              |""")
 
+      netOut.ensureSubscription()
+
       inside(expectRequest()) {
         case HttpRequest(POST, _, _, HttpEntity.Chunked(_, data), _) =>
           val dataProbe = TestSubscriber.manualProbe[ChunkStreamPart]
@@ -383,8 +389,6 @@ class HttpServerSpec extends AkkaSpec(
           sub.request(1)
           dataProbe.expectNext(Chunk(ByteString("abcdef")))
           dataProbe.expectComplete()
-          // connection closes once requested elements are consumed
-          scheduler.timePasses(100.millis) // > lingerTimeout to trigger delay cancellation
           netIn.expectCancellation()
       }
       shutdownBlueprint()
@@ -425,7 +429,7 @@ class HttpServerSpec extends AkkaSpec(
           dataProbe.expectNext(ByteString("abcdef"))
           dataProbe.expectNoMessage(50.millis)
           closeNetworkInput()
-          dataProbe.expectError().getMessage shouldEqual "Entity stream truncation"
+          dataProbe.expectError().getMessage shouldEqual "Entity stream truncation. The HTTP parser was receiving an entity when the underlying connection was closed unexpectedly."
       }
       shutdownBlueprint()
     })
@@ -447,7 +451,7 @@ class HttpServerSpec extends AkkaSpec(
           dataProbe.expectNext(Chunk(ByteString("abcdef")))
           dataProbe.expectNoMessage(50.millis)
           closeNetworkInput()
-          dataProbe.expectError().getMessage shouldEqual "Entity stream truncation"
+          dataProbe.expectError().getMessage shouldEqual "Entity stream truncation. The HTTP parser was receiving an entity when the underlying connection was closed unexpectedly."
       }
       shutdownBlueprint()
     })
@@ -473,6 +477,7 @@ class HttpServerSpec extends AkkaSpec(
     })
 
     "not emit entities when responding to HEAD requests if transparent-head-requests is enabled (with Strict)" in assertAllStagesStopped(new TestSetup {
+      override def settings = super.settings.withTransparentHeadRequests(true)
       send("""HEAD / HTTP/1.1
              |Host: example.com
              |
@@ -495,6 +500,7 @@ class HttpServerSpec extends AkkaSpec(
     })
 
     "not emit entities when responding to HEAD requests if transparent-head-requests is enabled (with Default)" in assertAllStagesStopped(new TestSetup {
+      override def settings = super.settings.withTransparentHeadRequests(true)
       send("""HEAD / HTTP/1.1
              |Host: example.com
              |
@@ -520,6 +526,7 @@ class HttpServerSpec extends AkkaSpec(
     })
 
     "not emit entities when responding to HEAD requests if transparent-head-requests is enabled (with CloseDelimited)" in assertAllStagesStopped(new TestSetup {
+      override def settings = super.settings.withTransparentHeadRequests(true)
       send("""HEAD / HTTP/1.1
              |Host: example.com
              |
@@ -546,6 +553,7 @@ class HttpServerSpec extends AkkaSpec(
     })
 
     "not emit entities when responding to HEAD requests if transparent-head-requests is enabled (with Chunked)" in assertAllStagesStopped(new TestSetup {
+      override def settings = super.settings.withTransparentHeadRequests(true)
       send("""HEAD / HTTP/1.1
              |Host: example.com
              |
@@ -571,6 +579,7 @@ class HttpServerSpec extends AkkaSpec(
     })
 
     "respect Connection headers of HEAD requests if transparent-head-requests is enabled" in assertAllStagesStopped(new TestSetup {
+      override def settings = ServerSettings(system).withTransparentHeadRequests(true)
       send("""HEAD / HTTP/1.1
              |Host: example.com
              |Connection: close
@@ -698,8 +707,8 @@ class HttpServerSpec extends AkkaSpec(
 
       // client then closes the connection
       netIn.sendComplete()
-      requests.expectComplete()
       netOut.expectComplete()
+      requests.expectError()
     })
 
     "not fail with 'Cannot pull port (ControllerStage.requestParsingIn) twice' for early response to `100 Continue` request (after 100-Continue has been sent)" in assertAllStagesStopped(new TestSetup {
@@ -811,8 +820,8 @@ class HttpServerSpec extends AkkaSpec(
       netIn.sendComplete()
       netOut.expectComplete()
     })
+
     "log error and reset connection when the response stream fails" in assertAllStagesStopped(new TestSetup {
-      override def settings: ServerSettings = super.settings.mapTimeouts(_.withLingerTimeout(10.millis))
 
       send("""POST /inject-meteor HTTP/1.1
              |Host: example.com
@@ -841,12 +850,10 @@ class HttpServerSpec extends AkkaSpec(
       }
 
       netOut.expectError()
-      scheduler.timePasses(100.millis) // > lingerTimeout to trigger delay cancellation
       netIn.expectCancellation()
     })
-    "log error and reset connection when the response stream materialization fails" in assertAllStagesStopped(new TestSetup {
-      override def settings: ServerSettings = super.settings.mapTimeouts(_.withLingerTimeout(10.millis))
 
+    "log error and reset connection when the response stream materialization fails" in assertAllStagesStopped(new TestSetup {
       send("""POST /recharge-banana HTTP/1.1
              |Host: example.com
              |
@@ -877,7 +884,6 @@ class HttpServerSpec extends AkkaSpec(
           |
           |There was an internal server error.""")
 
-      scheduler.timePasses(100.millis) // > lingerTimeout to trigger delay cancellation
       netIn.sendComplete()
       netOut.expectComplete()
     })
@@ -918,6 +924,35 @@ class HttpServerSpec extends AkkaSpec(
       requests.request(1)
       requests.expectComplete()
       netOut.expectComplete()
+    })
+
+    "not leak stages when network fails while streaming response" in assertAllStagesStopped(new TestSetup {
+      send("""GET / HTTP/1.1
+             |Host: example.com
+             |
+             |""")
+
+      expectRequest()
+      val dataOut = TestPublisher.probe[ByteString]()
+      val entity = HttpEntity(ContentTypes.`application/octet-stream`, Source.fromPublisher(dataOut))
+      responses.sendNext(HttpResponse(entity = entity))
+
+      expectResponseWithWipedDate(
+        """HTTP/1.1 200 OK
+          |Server: akka-http/test
+          |Date: XXXX
+          |Transfer-Encoding: chunked
+          |Content-Type: application/octet-stream
+          |
+          |""")
+
+      dataOut.sendNext(ByteString("hello "))
+      netOut.expectUtf8EncodedString("6\r\nhello \r\n")
+
+      dataOut.sendNext(ByteString("world"))
+      netOut.expectUtf8EncodedString("5\r\nworld\r\n")
+
+      netIn.sendError(new RuntimeException("network error"))
     })
 
     "deliver a request with a non-RFC3986 request-target" in assertAllStagesStopped(new TestSetup {
@@ -989,6 +1024,31 @@ class HttpServerSpec extends AkkaSpec(
       shutdownBlueprint()
     })
 
+    "support remote-address-attribute" in assertAllStagesStopped(new TestSetup {
+      lazy val theAddress = InetAddress.getByName("127.5.2.1")
+
+      override def settings: ServerSettings = super.settings.withRemoteAddressAttribute(true)
+
+      override def modifyServer(server: ServerLayer): ServerLayer = {
+        BidiFlow.fromGraph(server.withAttributes(
+          HttpAttributes.remoteAddress(new InetSocketAddress(theAddress, 8080))
+        ))
+      }
+
+      send(
+        """GET / HTTP/1.1
+            |Host: example.com
+            |X-Forwarded-For: 123.123.123.123
+            |X-Real-Ip: 123.123.123.123
+            |Remote-Address: 123.123.123.123
+            |
+            |""".stripMarginWithNewline("\r\n"))
+
+      val request = expectRequest()
+      request.attributes(AttributeKeys.remoteAddress) should equal(RemoteAddress(theAddress, Some(8080)))
+      shutdownBlueprint()
+    })
+
     "don't leak stages when connection is closed for request" which {
       "uses GET method with an unread empty chunked entity" in assertAllStagesStopped(new TestSetup {
         send("""GET / HTTP/1.1
@@ -1009,7 +1069,7 @@ class HttpServerSpec extends AkkaSpec(
         netIn.sendComplete()
         netOut.cancel()
 
-        requests.expectComplete()
+        requests.expectError()
       })
 
       "uses GET request with an unread truncated chunked entity" in assertAllStagesStopped(new TestSetup {
@@ -1030,7 +1090,7 @@ class HttpServerSpec extends AkkaSpec(
         netIn.sendComplete()
         netOut.cancel()
 
-        requests.expectComplete()
+        requests.expectError()
       })
 
       "uses GET request with a truncated default entity" in assertAllStagesStopped(new TestSetup {
@@ -1049,111 +1109,7 @@ class HttpServerSpec extends AkkaSpec(
         netIn.sendComplete()
         netOut.cancel()
 
-        requests.expectComplete()
-      })
-    }
-
-    "support request timeouts" which {
-
-      "are defined via the config" in assertAllStagesStopped(new RequestTimeoutTestSetup(10.millis) {
-        send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
-        expectRequest().header[`Timeout-Access`] shouldBe defined
-
-        scheduler.timePasses(20.millis)
-        expectResponseWithWipedDate(
-          """HTTP/1.1 503 Service Unavailable
-            |Server: akka-http/test
-            |Date: XXXX
-            |Content-Type: text/plain; charset=UTF-8
-            |Content-Length: 105
-            |
-            |The server was not able to produce a timely response to your request.
-            |Please try again in a short while!""")
-
-        netIn.sendComplete()
-        netOut.expectComplete()
-      })
-
-      "are programmatically increased (not expiring)" in assertAllStagesStopped(new RequestTimeoutTestSetup(50.millis) {
-        send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
-        expectRequest().header[`Timeout-Access`].foreach(_.timeoutAccess.updateTimeout(250.millis))
-        netOut.expectNoBytes()
-        responses.sendNext(HttpResponse())
-        expectResponseWithWipedDate(
-          """HTTP/1.1 200 OK
-            |Server: akka-http/test
-            |Date: XXXX
-            |Content-Length: 0
-            |
-            |""")
-
-        netIn.sendComplete()
-        netOut.expectComplete()
-      })
-
-      "are programmatically increased (expiring)" in assertAllStagesStopped(new RequestTimeoutTestSetup(50.millis) {
-        send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
-
-        scheduler.timePasses(25.millis)
-        expectRequest().header[`Timeout-Access`].foreach(_.timeoutAccess.updateTimeout(250.millis))
-
-        scheduler.timePasses(150.millis)
-        netOut.expectNoBytes(Duration.Zero)
-
-        scheduler.timePasses(100.millis)
-        expectResponseWithWipedDate(
-          """HTTP/1.1 503 Service Unavailable
-            |Server: akka-http/test
-            |Date: XXXX
-            |Content-Type: text/plain; charset=UTF-8
-            |Content-Length: 105
-            |
-            |The server was not able to produce a timely response to your request.
-            |Please try again in a short while!""")
-
-        netIn.sendComplete()
-        netOut.expectComplete()
-      })
-
-      "are programmatically decreased" in assertAllStagesStopped(new RequestTimeoutTestSetup(250.millis) {
-        send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
-        expectRequest().header[`Timeout-Access`].foreach(_.timeoutAccess.updateTimeout(50.millis))
-
-        scheduler.timePasses(40.millis)
-        netOut.expectNoBytes(Duration.Zero)
-
-        scheduler.timePasses(10.millis)
-        expectResponseWithWipedDate(
-          """HTTP/1.1 503 Service Unavailable
-            |Server: akka-http/test
-            |Date: XXXX
-            |Content-Type: text/plain; charset=UTF-8
-            |Content-Length: 105
-            |
-            |The server was not able to produce a timely response to your request.
-            |Please try again in a short while!""")
-
-        netIn.sendComplete()
-        netOut.expectComplete()
-      })
-
-      "have a programmatically set timeout handler" in assertAllStagesStopped(new RequestTimeoutTestSetup(400.millis) {
-        send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
-        val timeoutResponse = HttpResponse(StatusCodes.InternalServerError, entity = "OOPS!")
-        expectRequest().header[`Timeout-Access`].foreach(_.timeoutAccess.updateHandler((_: HttpRequest) => timeoutResponse))
-
-        scheduler.timePasses(500.millis)
-        expectResponseWithWipedDate(
-          """HTTP/1.1 500 Internal Server Error
-            |Server: akka-http/test
-            |Date: XXXX
-            |Content-Type: text/plain; charset=UTF-8
-            |Content-Length: 5
-            |
-            |OOPS!""")
-
-        netIn.sendComplete()
-        netOut.expectComplete()
+        requests.expectError()
       })
     }
 
@@ -1177,7 +1133,7 @@ class HttpServerSpec extends AkkaSpec(
           |
           |""")
 
-      requests.expectComplete()
+      requests.expectError()
       netOut.expectComplete()
       netIn.sendComplete()
     })
@@ -1202,7 +1158,7 @@ class HttpServerSpec extends AkkaSpec(
           |
           |""")
 
-      requests.expectComplete()
+      requests.expectError()
       netOut.expectComplete()
       netIn.sendComplete()
     })
@@ -1251,17 +1207,20 @@ class HttpServerSpec extends AkkaSpec(
           def expectDefaultEntityWithSizeError(limit: Int, actualSize: Int) =
             inside(request) {
               case HttpRequest(POST, _, _, entity @ HttpEntity.Default(_, `actualSize`, _), _) =>
-                val error = the[Exception]
-                  .thrownBy(entity.dataBytes.runFold(ByteString.empty)(_ ++ _).awaitResult(100.millis.dilated))
-                  .getCause
+                val origError = the[Exception]
+                  .thrownBy(entity.dataBytes.runFold(ByteString.empty)(_ ++ _).awaitResult(3.seconds.dilated))
+
+                log.error(origError, "Original Error")
+                val error = origError.getCause
+
                 error shouldEqual EntityStreamSizeException(limit, Some(actualSize))
-                error.getMessage should include("exceeded content length limit")
+                error.getMessage should include("exceeded size limit")
 
                 responses.expectRequest()
                 responses.sendError(error.asInstanceOf[Exception])
 
                 expectResponseWithWipedDate(
-                  s"""HTTP/1.1 413 Request Entity Too Large
+                  s"""HTTP/1.1 413 Payload Too Large
                       |Server: akka-http/test
                       |Date: XXXX
                       |Connection: close
@@ -1274,17 +1233,19 @@ class HttpServerSpec extends AkkaSpec(
           def expectChunkedEntityWithSizeError(limit: Int) =
             inside(request) {
               case HttpRequest(POST, _, _, entity: HttpEntity.Chunked, _) =>
-                val error = the[Exception]
-                  .thrownBy(entity.dataBytes.runFold(ByteString.empty)(_ ++ _).awaitResult(100.millis.dilated))
-                  .getCause
+                val origError = the[Exception]
+                  .thrownBy(entity.dataBytes.runFold(ByteString.empty)(_ ++ _).awaitResult(3.seconds.dilated))
+
+                log.error(origError, "Original Error")
+                val error = origError.getCause
                 error shouldEqual EntityStreamSizeException(limit, None)
-                error.getMessage should include("exceeded content length limit")
+                error.getMessage should include("exceeded size limit")
 
                 responses.expectRequest()
                 responses.sendError(error.asInstanceOf[Exception])
 
                 expectResponseWithWipedDate(
-                  s"""HTTP/1.1 413 Request Entity Too Large
+                  s"""HTTP/1.1 413 Payload Too Large
                     |Server: akka-http/test
                     |Date: XXXX
                     |Connection: close
@@ -1453,22 +1414,38 @@ class HttpServerSpec extends AkkaSpec(
       netOut.expectComplete()
     })
 
+    "allow overriding the URI parsing error response" in assertAllStagesStopped(new TestSetup {
+      override def settings: ServerSettings = super.settings.withParsingErrorHandler("akka.http.impl.engine.server.TestParsingErrorHandler$")
+
+      send("""GET http://www.example.com/unparsable HTTP/1.1
+             |Host: www.example.net
+             |
+             |""")
+
+      requests.request(1)
+
+      expectResponseWithWipedDate(
+        """|HTTP/1.1 418 I'm a teapot
+           |Server: akka-http/test
+           |Date: XXXX
+           |Connection: close
+           |Content-Type: text/plain; charset=UTF-8
+           |Content-Length: 7
+           |
+           |Tea hea""")
+
+      netIn.sendComplete()
+      netOut.expectComplete()
+    })
   }
   class TestSetup(maxContentLength: Int = -1) extends HttpServerTestSetupBase {
     implicit def system = spec.system
     implicit def materializer = spec.materializer
-    val scheduler = spec.system.scheduler.asInstanceOf[ExplicitlyTriggeredScheduler]
 
     override def settings = {
       val s = super.settings
       if (maxContentLength < 0) s
       else s.withParserSettings(s.parserSettings.withMaxContentLength(maxContentLength))
-    }
-  }
-  class RequestTimeoutTestSetup(requestTimeout: FiniteDuration) extends TestSetup {
-    override def settings = {
-      val s = super.settings
-      s.withTimeouts(s.timeouts.withRequestTimeout(requestTimeout))
     }
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl.settings
@@ -31,6 +31,7 @@ import scala.concurrent.duration.{ Duration, FiniteDuration }
   def getMaxConnections: Int
   def getPipeliningLimit: Int
   def getRemoteAddressHeader: Boolean
+  def getRemoteAddressAttribute: Boolean
   def getRawRequestUriHeader: Boolean
   def getTransparentHeadRequests: Boolean
   def getVerboseErrorMessages: Boolean
@@ -46,6 +47,8 @@ import scala.concurrent.duration.{ Duration, FiniteDuration }
   def getDefaultHttpPort: Int
   def getDefaultHttpsPort: Int
   def getTerminationDeadlineExceededResponse: akka.http.javadsl.model.HttpResponse
+  def getParsingErrorHandler: String
+  def getStreamCancellationDelay: FiniteDuration
 
   // ---
 
@@ -55,6 +58,7 @@ import scala.concurrent.duration.{ Duration, FiniteDuration }
   def withMaxConnections(newValue: Int): ServerSettings = self.copy(maxConnections = newValue)
   def withPipeliningLimit(newValue: Int): ServerSettings = self.copy(pipeliningLimit = newValue)
   def withRemoteAddressHeader(newValue: Boolean): ServerSettings = self.copy(remoteAddressHeader = newValue)
+  def withRemoteAddressAttribute(newValue: Boolean): ServerSettings = self.copy(remoteAddressAttribute = newValue)
   def withRawRequestUriHeader(newValue: Boolean): ServerSettings = self.copy(rawRequestUriHeader = newValue)
   def withTransparentHeadRequests(newValue: Boolean): ServerSettings = self.copy(transparentHeadRequests = newValue)
   def withVerboseErrorMessages(newValue: Boolean): ServerSettings = self.copy(verboseErrorMessages = newValue)
@@ -73,7 +77,8 @@ import scala.concurrent.duration.{ Duration, FiniteDuration }
   def withDefaultHttpsPort(newValue: Int): ServerSettings = self.copy(defaultHttpPort = newValue)
   def withTerminationDeadlineExceededResponse(response: akka.http.javadsl.model.HttpResponse): ServerSettings =
     self.copy(terminationDeadlineExceededResponse = response.asScala)
-
+  def withParsingErrorHandler(newValue: String): ServerSettings = self.copy(parsingErrorHandler = parsingErrorHandler)
+  def withStreamCancellationDelay(newValue: FiniteDuration): ServerSettings = self.copy(streamCancellationDelay = newValue)
 }
 
 object ServerSettings extends SettingsCompanion[ServerSettings] {

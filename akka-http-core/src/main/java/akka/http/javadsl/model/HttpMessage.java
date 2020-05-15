@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl.model;
@@ -49,13 +49,13 @@ public interface HttpMessage {
 
     /**
      * Try to find the first header with the given name (case-insensitive) and return
-     * Some(header), otherwise this method returns None.
+     * Optional.of(header), otherwise this method returns an empty Optional.
      */
     Optional<HttpHeader> getHeader(String headerName);
 
     /**
      * Try to find the first header of the given class and return
-     * Some(header), otherwise this method returns None.
+     * Optional.of(header), otherwise this method returns an empty Optional.
      */
     <T extends HttpHeader> Optional<T> getHeader(Class<T> headerClass);
 
@@ -64,6 +64,12 @@ public interface HttpMessage {
      * of this message.
      */
     <T extends HttpHeader> Iterable<T> getHeaders(Class<T> headerClass);
+
+    /**
+     * Try to find the attribute for the given key and return
+     * Optional.of(attribute), otherwise this method returns an empty Optional.
+     */
+    <T> Optional<T> getAttribute(AttributeKey<T> key);
 
     /**
      * The entity of this message.
@@ -121,6 +127,8 @@ public interface HttpMessage {
          */
         Self withHeaders(Iterable<HttpHeader> headers);
 
+        <T> Self addAttribute(AttributeKey<T> key, T value);
+
         /**
          * Returns a copy of this message with the given http credential header added to the list of headers.
          */
@@ -130,6 +138,11 @@ public interface HttpMessage {
          * Returns a copy of this message with all headers of the given name (case-insensitively) removed.
          */
         Self removeHeader(String headerName);
+
+        /**
+         * Returns a copy of this message with the attribute with this key (if any) removed.
+         */
+        Self removeAttribute(AttributeKey<?> key);
 
         /**
          * Returns a copy of this message with a new entity.

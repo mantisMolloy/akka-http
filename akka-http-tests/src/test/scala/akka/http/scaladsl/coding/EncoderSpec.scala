@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.coding
 
 import akka.util.ByteString
-import org.scalatest.WordSpec
 import akka.http.scaladsl.model._
 import headers._
 import HttpMethods.POST
 import scala.concurrent.duration._
 import akka.http.impl.util._
 import akka.testkit._
+import org.scalatest.wordspec.AnyWordSpec
 
-class EncoderSpec extends WordSpec with CodecSpecSupport {
+class EncoderSpec extends AnyWordSpec with CodecSpecSupport {
 
   "An Encoder" should {
     "not transform the message if messageFilter returns false" in {

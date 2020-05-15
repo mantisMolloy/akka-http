@@ -245,7 +245,7 @@ header across persistent HTTP connections.
 
 Akka HTTP contains a rich model of the most common HTTP headers. Parsing and rendering is done automatically so that
 applications don't need to care for the actual syntax of headers. Headers not modelled explicitly are represented
-as a @apidoc[RawHeader] (which is essentially a String/String name/value pair).
+as a @apidoc[RawHeader], which is essentially a String/String name/value pair.
 
 See these examples of how to deal with headers:
 
@@ -355,6 +355,20 @@ types (such as matching a custom header against a @apidoc[RawHeader] in routing 
 Implement @apidoc[ModeledCustomHeader] and @java[@javadoc[ModeledCustomHeaderFactory](akka.http.javadsl.model.headers.ModeledCustomHeaderFactory)] instead of @apidoc[CustomHeader] to be
 able to use the convenience methods that allow parsing the custom user-defined header from @apidoc[HttpHeader].
 @@@
+
+## Attributes
+
+Sometimes it can be useful to keep track of some information associated with a request without
+explicitly closing over it. Such information can be attached to a request or response though
+message attributes:
+
+Scala
+:   @@snip [ModelSpec.scala]($test$/scala/docs/http/scaladsl/ModelSpec.scala) { #attributes }
+
+Java
+:   @@snip [ModelDocTest.java]($test$/java/docs/http/javadsl/ModelDocTest.java) { #attributes }
+
+Message attributes are only to be used within in your application, they are not present on the wire.
 
 ## Parsing / Rendering
 

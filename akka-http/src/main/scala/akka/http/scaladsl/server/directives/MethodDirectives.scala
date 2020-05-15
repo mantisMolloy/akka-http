@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -99,10 +99,10 @@ trait MethodDirectives {
    * @group method
    */
   def overrideMethodWithParameter(paramName: String): Directive0 =
-    parameter(paramName?) flatMap {
+    parameter(paramName.optional) flatMap {
       case Some(method) =>
         getForKey(method.toUpperCase) match {
-          case Some(m) => mapRequest(_.copy(method = m))
+          case Some(m) => mapRequest(_.withMethod(m))
           case _       => complete(StatusCodes.NotImplemented)
         }
       case None => pass

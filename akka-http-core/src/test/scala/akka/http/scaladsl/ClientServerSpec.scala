@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl
@@ -14,6 +14,9 @@ import scala.concurrent.duration._
 import scala.concurrent.{ Await, Future, Promise }
 import scala.util.{ Success, Try }
 import akka.actor.ActorSystem
+import akka.event.Logging
+import akka.event.Logging.LogEvent
+import akka.http.impl.engine.HttpIdleTimeoutException
 import akka.http.impl.engine.ws.ByteStringSinkProbe
 import akka.http.impl.util._
 import akka.http.scaladsl.Http.ServerBinding
@@ -32,50 +35,44 @@ import akka.util.ByteString
 import com.typesafe.config.{ Config, ConfigFactory }
 import com.typesafe.sslconfig.akka.AkkaSSLConfig
 import com.typesafe.sslconfig.ssl.{ SSLConfigSettings, SSLLooseConfig }
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.concurrent.Eventually.eventually
 
-class ClientServerSpec extends WordSpec with Matchers with BeforeAndAfterAll with ScalaFutures with WithLogCapturing {
-  val testConf: Config = ConfigFactory.parseString("""
-    akka.loglevel = DEBUG
-    akka.loggers = ["akka.http.impl.util.SilenceAllTestEventListener"]
-    akka.stdout-loglevel = ERROR
-    windows-connection-abort-workaround-enabled = auto
-    akka.http.server.request-timeout = infinite
-    akka.http.server.log-unencrypted-network-bytes = 200
-    akka.http.client.log-unencrypted-network-bytes = 200
-                                                   """)
-  implicit val system = ActorSystem(getClass.getSimpleName, testConf)
+class ClientServerSpec extends AkkaSpecWithMaterializer(
+  """
+     akka.http.server.request-timeout = infinite
+     akka.http.server.log-unencrypted-network-bytes = 200
+     akka.http.client.log-unencrypted-network-bytes = 200
+  """
+) with ScalaFutures {
   import system.dispatcher
-  implicit val materializer = ActorMaterializer()
-  implicit val patience = PatienceConfig(3.seconds.dilated)
 
   val testConf2: Config =
     ConfigFactory.parseString("akka.stream.materializer.subscription-timeout.timeout = 1 s")
-      .withFallback(testConf)
+      .withFallback(system.settings.config)
   val system2 = ActorSystem(getClass.getSimpleName, testConf2)
-  val materializer2 = ActorMaterializer.create(system2)
+  val materializer2 = SystemMaterializer(system2).materializer
 
   "The low-level HTTP infrastructure" should {
 
     "properly bind a server" in {
-      val (hostname, port) = SocketUtil.temporaryServerHostnameAndPort()
       val probe = TestSubscriber.manualProbe[Http.IncomingConnection]()
-      val binding = Http().bind(hostname, port).to(Sink.fromSubscriber(probe)).run()
+      val binding = Http().bind("127.0.0.1", 0).to(Sink.fromSubscriber(probe)).run()
       val sub = probe.expectSubscription() // if we get it we are bound
-      Await.result(binding, 1.second.dilated)
+      Await.result(binding, 1.second.dilated).unbind()
       sub.cancel()
     }
 
     "properly bind a server with a default port set via settings" in {
-      val (hostname, port) = SocketUtil.temporaryServerHostnameAndPort()
       val probe = TestSubscriber.manualProbe[Http.IncomingConnection]()
-      val settings = ServerSettings(system).withDefaultHttpPort(port)
-      val binding = Http().bind(hostname, settings = settings).to(Sink.fromSubscriber(probe)).run()
+      // not really testing anything here, problem is that it is hard to find an unused port otherwise
+      val settings = ServerSettings(system).withDefaultHttpPort(0)
+      val bindingF = Http().bind("0.0.0.0", settings = settings).to(Sink.fromSubscriber(probe)).run()
       val sub = probe.expectSubscription() // if we get it we are bound
-      val address = Await.result(binding, 1.second.dilated).localAddress
-      address.getPort shouldEqual port
+      val binding = Await.result(bindingF, 1.second.dilated)
+      // though, that wouldn't probably happen because binding ports < 1024 is restricted in most environments
+      binding.localAddress.getPort should not be (80)
+      binding.unbind()
       sub.cancel()
     }
 
@@ -392,7 +389,6 @@ class ClientServerSpec extends WordSpec with Matchers with BeforeAndAfterAll wit
       "stop stages on failure" in Utils.assertAllStagesStopped {
         val (hostname, port) = SocketUtil.temporaryServerHostnameAndPort()
         val stageCounter = new AtomicLong(0)
-        val cancelCounter = new AtomicLong(0)
         val stage: GraphStage[FlowShape[HttpRequest, HttpResponse]] = new GraphStage[FlowShape[HttpRequest, HttpResponse]] {
           val in = Inlet[HttpRequest]("request.in")
           val out = Outlet[HttpResponse]("response.out")
@@ -404,7 +400,6 @@ class ClientServerSpec extends WordSpec with Matchers with BeforeAndAfterAll wit
             override def postStop(): Unit = stageCounter.decrementAndGet()
             override def onPush(): Unit = push(out, HttpResponse(entity = stageCounter.get().toString))
             override def onPull(): Unit = pull(in)
-            override def onDownstreamFinish(): Unit = cancelCounter.incrementAndGet()
 
             setHandlers(in, out, this)
           }
@@ -422,23 +417,23 @@ class ClientServerSpec extends WordSpec with Matchers with BeforeAndAfterAll wit
 
         def performValidRequest() = Http().outgoingConnection(hostname, port).runWith(Source.single(HttpRequest()), Sink.ignore)
 
-        def assertCounters(stage: Int, cancel: Int) = eventually(timeout(1.second.dilated)) {
-          stageCounter.get shouldEqual stage
-          cancelCounter.get shouldEqual cancel
-        }
+        def assertCounters(stage: Int) =
+          eventually(timeout(3.second.dilated)) {
+            stageCounter.get shouldEqual stage
+          }
 
         val bind = Await.result(Http().bindAndHandle(Flow.fromGraph(stage), hostname, port)(materializer2), 1.seconds.dilated)
 
         performValidRequest()
-        assertCounters(0, 1)
+        assertCounters(0)
 
         EventFilter.warning(pattern = "Illegal HTTP message start", occurrences = 1) intercept {
           performFaultyRequest()
-          assertCounters(0, 2)
+          assertCounters(0)
         }
 
         performValidRequest()
-        assertCounters(0, 3)
+        assertCounters(0)
 
         Await.result(bind.unbind(), 1.second.dilated)
       }(materializer2)
@@ -472,6 +467,36 @@ class ClientServerSpec extends WordSpec with Matchers with BeforeAndAfterAll wit
         clientIn.expectComplete()
 
         binding.foreach(_.unbind())
+      }
+    }
+
+    "properly complete a simple request/response cycle using Http.singleRequest" in Utils.assertAllStagesStopped {
+      new TestSetup {
+        // make sure no log message above DEBUG are printed by that exchange
+        EventFilter.custom({ case l: LogEvent if l.level != Logging.DebugLevel => true }, 0).intercept {
+          val settings = ConnectionPoolSettings(system).withIdleTimeout(500.millis)
+
+          val request = HttpRequest(uri = s"http://$hostname:$port/abc")
+
+          val responseFut = Http().singleRequest(request, settings = settings)
+          val (serverIn, serverOut) = acceptConnection()
+
+          val serverInSub = serverIn.expectSubscription()
+          serverInSub.request(1)
+          serverIn.expectNext().uri shouldEqual Uri(s"http://$hostname:$port/abc")
+
+          val serverOutSub = serverOut.expectSubscription()
+          serverOutSub.expectRequest()
+          serverOutSub.sendNext(HttpResponse(entity = "yeah"))
+
+          val response = responseFut.awaitResult(1.second.dilated)
+          toStrict(response.entity) shouldEqual HttpEntity("yeah")
+
+          serverIn.expectComplete()
+          serverOutSub.expectCancellation()
+
+          binding.foreach(_.unbind())
+        }
       }
     }
 
@@ -556,6 +581,7 @@ class ClientServerSpec extends WordSpec with Matchers with BeforeAndAfterAll wit
       try {
         (1 to 10).foreach(runOnce)
       } finally server.foreach(_.unbind())
+      Http().shutdownAllConnectionPools().futureValue
     }
 
     "complete a request/response when the request side immediately closes the connection after sending the request" in Utils.assertAllStagesStopped {
@@ -614,7 +640,8 @@ Host: example.com
         .futureValue
         .entity.dataBytes.runFold(ByteString.empty)(_ ++ _).futureValue.utf8String shouldEqual entity
 
-      serverBinding.unbind()
+      serverBinding.unbind().futureValue
+      Http().shutdownAllConnectionPools().futureValue
     }
 
     class CloseDelimitedTLSSetup {
@@ -751,11 +778,35 @@ Host: example.com
       }
 
       Await.result(binding.unbind(), 10.seconds)
+      Http().shutdownAllConnectionPools().futureValue
+    }
+
+    "report idle timeout on request entity stream for stalled client" in Utils.assertAllStagesStopped {
+      val dataProbe = ByteStringSinkProbe()
+
+      def handler(request: HttpRequest): Future[HttpResponse] = {
+        request.entity.dataBytes.runWith(dataProbe.sink)
+        Promise[HttpResponse].future // just let it hanging until idle timeout triggers
+      }
+
+      val settings = ServerSettings(system).mapTimeouts(_.withIdleTimeout(1.second))
+      val binding = Http().bindAndHandleAsync(handler, "127.0.0.1", port = 0, settings = settings).futureValue
+      val uri = "http://" + binding.localAddress.getHostString + ":" + binding.localAddress.getPort
+
+      val dataOutProbe = TestPublisher.probe[ByteString]()
+      Http().singleRequest(HttpRequest(uri = uri, entity = HttpEntity(ContentTypes.`application/octet-stream`, Source.fromPublisher(dataOutProbe))))
+
+      dataProbe.ensureSubscription()
+      dataOutProbe.sendNext(ByteString("test"))
+      dataProbe.expectUtf8EncodedString("test")
+      dataProbe.expectError() should be(an[HttpIdleTimeoutException])
+
+      binding.unbind().futureValue
+      Http().shutdownAllConnectionPools().futureValue
     }
   }
 
-  override def afterAll() = {
-    TestKit.shutdownActorSystem(system)
+  override def beforeTermination() = {
     TestKit.shutdownActorSystem(system2)
   }
 

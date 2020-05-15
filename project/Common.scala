@@ -1,15 +1,18 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka
 
 import sbt._
 import Keys._
+import com.lightbend.paradox.projectinfo.ParadoxProjectInfoPluginKeys._
+import com.typesafe.tools.mima.plugin.MimaKeys._
 
 object Common extends AutoPlugin {
   override def trigger: PluginTrigger = allRequirements
   override lazy val projectSettings = Seq(
+    projectInfoVersion := (if (isSnapshot.value) "snapshot" else version.value),
     scalacOptions ++= Seq(
       "-deprecation",
       "-encoding", "UTF-8", // yes, this is 2 args
@@ -17,8 +20,10 @@ object Common extends AutoPlugin {
       "-unchecked",
       "-Xlint",
       // "-Yno-adapted-args", //akka-http heavily depends on adapted args and => Unit implicits break otherwise
-      "-Ywarn-dead-code"
+      "-Ywarn-dead-code",
       // "-Xfuture" // breaks => Unit implicits
+      // TODO https://github.com/akka/akka-http/issues/2738
+      "-P:silencer:globalFilters=(Adapting\\ argument\\ list\\ by\\ creating|Adaptation\\ of\\ argument\\ list\\ by\\ inserting)"
     ),
     // '-release' parameter is restricted to 'Compile, compile' scope because
     // otherwise `sbt akka-http-xml/compile:doc` fails with it on Scala 2.12.9
@@ -32,6 +37,11 @@ object Common extends AutoPlugin {
     javacOptions in (Compile, compile) ++=
       // From jdk9 onwards this is covered by the '-release' flag above
       onlyOnJdk8("-target", "1.8"),
+    mimaReportSignatureProblems := true,
+    libraryDependencies ++= Seq(
+      compilerPlugin("com.github.ghik" % "silencer-plugin" % Dependencies.silencerVersion cross CrossVersion.full),
+      "com.github.ghik" % "silencer-lib" % Dependencies.silencerVersion % Provided cross CrossVersion.full
+    )
   )
 
   val specificationVersion: String = sys.props("java.specification.version")

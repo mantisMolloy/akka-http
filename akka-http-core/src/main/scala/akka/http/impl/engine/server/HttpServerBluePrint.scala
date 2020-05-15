@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.server
@@ -16,6 +16,7 @@ import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.japi.Function
 import akka.event.LoggingAdapter
+import akka.http.ParsingErrorHandler
 import akka.util.ByteString
 import akka.stream._
 import akka.stream.TLSProtocol._
@@ -99,7 +100,7 @@ private[http] object HttpServerBluePrint {
     override val shape: FlowShape[RequestOutput, HttpRequest] = FlowShape.of(in, out)
 
     override def createLogic(inheritedAttributes: Attributes) = new GraphStageLogic(shape) with InHandler with OutHandler {
-      val remoteAddress = inheritedAttributes.get[HttpAttributes.RemoteAddress].map(_.address)
+      val remoteAddressOpt = inheritedAttributes.get[HttpAttributes.RemoteAddress].map(_.address)
 
       var downstreamPullWaiting = false
       var completionDeferred = false
@@ -125,12 +126,20 @@ private[http] object HttpServerBluePrint {
           val effectiveMethod = if (method == HttpMethods.HEAD && settings.transparentHeadRequests) HttpMethods.GET else method
 
           val effectiveHeaders =
-            if (settings.remoteAddressHeader && remoteAddress.isDefined)
-              headers.`Remote-Address`(RemoteAddress(remoteAddress.get)) +: hdrs
+            if (settings.remoteAddressHeader && remoteAddressOpt.isDefined)
+              headers.`Remote-Address`(RemoteAddress(remoteAddressOpt.get)) +: hdrs
             else hdrs
 
           val entity = createEntity(entityCreator) withSizeLimit settings.parserSettings.maxContentLength
-          push(out, HttpRequest(effectiveMethod, uri, effectiveHeaders, entity, protocol))
+          val httpRequest = HttpRequest(effectiveMethod, uri, effectiveHeaders, entity, protocol)
+
+          val effectiveHttpRequest = if (settings.remoteAddressAttribute) {
+            remoteAddressOpt.fold(httpRequest) { remoteAddress =>
+              httpRequest.addAttribute(AttributeKeys.remoteAddress, RemoteAddress(remoteAddress))
+            }
+          } else httpRequest
+
+          push(out, effectiveHttpRequest)
         case other =>
           throw new IllegalStateException(s"unexpected element of type ${other.getClass}")
       }
@@ -266,7 +275,7 @@ private[http] object HttpServerBluePrint {
           val access = new TimeoutAccessImpl(request, initialTimeout, requestEnd, callback,
             interpreter.materializer, log)
           openTimeouts = openTimeouts.enqueue(access)
-          push(requestOut, request.copy(headers = `Timeout-Access`(access) +: request.headers, entity = entity))
+          push(requestOut, request.addHeader(`Timeout-Access`(access)).withEntity(entity))
         }
         override def onUpstreamFinish() = complete(requestOut)
         override def onUpstreamFailure(ex: Throwable) = fail(requestOut, ex)
@@ -373,7 +382,8 @@ private[http] object HttpServerBluePrint {
 
     val shape = new BidiShape(requestParsingIn, requestPrepOut, httpResponseIn, responseCtxOut)
 
-    def createLogic(effectiveAttributes: Attributes) = new GraphStageLogic(shape) {
+    override private[akka] def createLogicAndMaterializedValue(inheritedAttributes: Attributes, outerMaterializer: Materializer) = new GraphStageLogic(shape) {
+      val parsingErrorHandler: ParsingErrorHandler = settings.parsingErrorHandlerInstance(ActorMaterializerHelper.downcast(outerMaterializer).system)
       val pullHttpResponseIn = () => tryPull(httpResponseIn)
       var openRequests = immutable.Queue[RequestStart]()
       var oneHundredContinueResponsePending = false
@@ -466,7 +476,7 @@ private[http] object HttpServerBluePrint {
                 case None     => s"Aggregated data length of request entity exceeds the configured limit of $limit bytes"
               }
               val info = ErrorInfo(summary, "Consider increasing the value of akka.http.server.parsing.max-content-length")
-              finishWithIllegalRequestError(StatusCodes.RequestEntityTooLarge, info)
+              finishWithIllegalRequestError(StatusCodes.PayloadTooLarge, info)
 
             case IllegalUriException(errorInfo) =>
               finishWithIllegalRequestError(StatusCodes.BadRequest, errorInfo)
@@ -491,11 +501,8 @@ private[http] object HttpServerBluePrint {
       })
 
       def finishWithIllegalRequestError(status: StatusCode, info: ErrorInfo): Unit = {
-        logParsingError(
-          info withSummaryPrepended s"Illegal request, responding with status '$status'",
-          log, settings.parserSettings.errorLoggingVerbosity)
-        val msg = if (settings.verboseErrorMessages) info.formatPretty else info.summary
-        emitErrorResponse(HttpResponse(status, entity = msg))
+        val errorResponse = JavaMapping.toScala(parsingErrorHandler.handle(status, info, log, settings))
+        emitErrorResponse(errorResponse)
       }
 
       def emitErrorResponse(response: HttpResponse): Unit =
@@ -577,7 +584,9 @@ private[http] object HttpServerBluePrint {
             _.via(OneHundredContinueStage.asInstanceOf[GraphStage[FlowShape[T, T]]])
           }
         }
-    }
+    } -> NotUsed
+
+    def createLogic(effectiveAttributes: Attributes): GraphStageLogic = throw new IllegalStateException("unexpected invocation")
   }
 
   /**
@@ -719,6 +728,15 @@ private[http] object HttpServerBluePrint {
               })
             }
             override def onDownstreamFinish(): Unit = cancel(fromNet)
+          })
+
+          // disable the old handlers, at this point we might still get something due to cancellation delay which we need to ignore
+          setHandlers(fromHttp, toHttp, new InHandler with OutHandler {
+            override def onPush(): Unit = ()
+            override def onPull(): Unit = ()
+            override def onUpstreamFinish(): Unit = ()
+            override def onUpstreamFailure(ex: Throwable): Unit = ()
+            override def onDownstreamFinish(): Unit = ()
           })
 
           newFlow.runWith(sourceOut.source, sinkIn.sink)(subFusingMaterializer)

@@ -1,23 +1,25 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl
 
 import java.net.InetSocketAddress
 import java.util.Optional
+
 import akka.http.impl.util.JavaMapping
 import akka.http.impl.util.JavaMapping.HttpsConnectionContext
 import akka.http.javadsl.model.ws._
-import akka.http.javadsl.settings.{ ConnectionPoolSettings, ClientConnectionSettings, ServerSettings }
+import akka.http.javadsl.settings.{ ClientConnectionSettings, ConnectionPoolSettings, ServerSettings }
 import akka.{ NotUsed, stream }
 import akka.stream.TLSProtocol._
 import com.typesafe.sslconfig.akka.AkkaSSLConfig
+
 import scala.concurrent.Future
 import scala.util.Try
 import akka.stream.scaladsl.Keep
-import akka.japi.{ Pair, Function }
-import akka.actor.{ ExtendedActorSystem, ActorSystem, ExtensionIdProvider, ExtensionId }
+import akka.japi.{ Function, Pair }
+import akka.actor.{ ActorSystem, ClassicActorSystemProvider, ExtendedActorSystem, ExtensionId, ExtensionIdProvider }
 import akka.event.LoggingAdapter
 import akka.stream.Materializer
 import akka.stream.javadsl.{ BidiFlow, Flow, Source }
@@ -25,12 +27,14 @@ import akka.http.impl.util.JavaMapping.Implicits._
 import akka.http.scaladsl.{ model => sm }
 import akka.http.javadsl.model._
 import akka.http._
+
 import scala.compat.java8.OptionConverters._
 import scala.compat.java8.FutureConverters._
 import java.util.concurrent.CompletionStage
 
 object Http extends ExtensionId[Http] with ExtensionIdProvider {
   override def get(system: ActorSystem): Http = super.get(system)
+  override def get(system: ClassicActorSystemProvider): Http = super.get(system)
   def lookup() = Http
   def createExtension(system: ExtendedActorSystem): Http = new Http(system)
 }
@@ -40,7 +44,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
 
   import language.implicitConversions
   private implicit def completionStageCovariant[T, U >: T](in: CompletionStage[T]): CompletionStage[U] = in.asInstanceOf[CompletionStage[U]]
-  private implicit def javaModelIsScalaModel[J <: AnyRef, S <: J](in: Future[J])(implicit ev: JavaMapping.Inherited[J, S]): Future[S] = in.asInstanceOf[Future[S]]
+  private implicit def javaModelIsScalaModel[J <: AnyRef, S <: J](in: Future[J])(implicit ev: JavaMapping.Inherited[J, S]): Future[S] = ev.downcast(in)
 
   private lazy val delegate = akka.http.scaladsl.Http(system)
 
@@ -500,7 +504,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
    * object of type `T` from the application which is emitted together with the corresponding response.
    */
   def cachedHostConnectionPool[T](to: ConnectHttp): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], HostConnectionPool] =
-    adaptTupleFlow(delegate.cachedHostConnectionPoolImpl[T](to.host, to.port).mapMaterializedValue(_.toJava))
+    adaptTupleFlow(delegate.cachedHostConnectionPool[T](to.host, to.port).mapMaterializedValue(_.toJava))
 
   /**
    * Returns a [[akka.stream.javadsl.Flow]] which dispatches incoming HTTP requests to the per-ActorSystem pool of outgoing
@@ -526,7 +530,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
     to:       ConnectHttp,
     settings: ConnectionPoolSettings,
     log:      LoggingAdapter): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], HostConnectionPool] =
-    adaptTupleFlow(delegate.cachedHostConnectionPoolImpl[T](to.host, to.port, settings.asScala, log).mapMaterializedValue(_.toJava))
+    adaptTupleFlow(delegate.cachedHostConnectionPool[T](to.host, to.port, settings.asScala, log).mapMaterializedValue(_.toJava))
 
   /**
    * Same as [[cachedHostConnectionPool]] but with HTTPS encryption.
@@ -537,7 +541,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
     to:       ConnectHttp,
     settings: ConnectionPoolSettings,
     log:      LoggingAdapter): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], HostConnectionPool] =
-    adaptTupleFlow(delegate.cachedHostConnectionPoolHttpsImpl[T](to.host, to.port, to.effectiveHttpsConnectionContext(defaultClientHttpsContext).asScala, settings.asScala, log)
+    adaptTupleFlow(delegate.cachedHostConnectionPoolHttps[T](to.host, to.port, to.effectiveHttpsConnectionContext(defaultClientHttpsContext).asScala, settings.asScala, log)
       .mapMaterializedValue(_.toJava))
 
   /**
@@ -548,7 +552,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
   def cachedHostConnectionPoolHttps[T](
     to: ConnectHttp
   ): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], HostConnectionPool] =
-    adaptTupleFlow(delegate.cachedHostConnectionPoolHttpsImpl[T](to.host, to.port, to.effectiveHttpsConnectionContext(defaultClientHttpsContext).asScala)
+    adaptTupleFlow(delegate.cachedHostConnectionPoolHttps[T](to.host, to.port, to.effectiveHttpsConnectionContext(defaultClientHttpsContext).asScala)
       .mapMaterializedValue(_.toJava))
 
   /**
@@ -588,7 +592,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
    * object of type `T` from the application which is emitted together with the corresponding response.
    */
   def superPool[T](): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], NotUsed] =
-    adaptTupleFlow(delegate.superPoolImpl[T]())
+    adaptTupleFlow(delegate.superPool[T]())
 
   /**
    * Creates a new "super connection pool flow", which routes incoming requests to a (cached) host connection pool
@@ -609,7 +613,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
     settings:          ConnectionPoolSettings,
     connectionContext: HttpsConnectionContext,
     log:               LoggingAdapter): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], NotUsed] =
-    adaptTupleFlow(delegate.superPoolImpl[T](connectionContext.asScala, settings.asScala, log))
+    adaptTupleFlow(delegate.superPool[T](connectionContext.asScala, settings.asScala, log))
 
   /**
    * Creates a new "super connection pool flow", which routes incoming requests to a (cached) host connection pool
@@ -629,7 +633,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
   def superPool[T](
     settings: ConnectionPoolSettings,
     log:      LoggingAdapter): Flow[Pair[HttpRequest, T], Pair[Try[HttpResponse], T], NotUsed] =
-    adaptTupleFlow(delegate.superPoolImpl[T](defaultClientHttpsContext.asScala, settings.asScala, log))
+    adaptTupleFlow(delegate.superPool[T](defaultClientHttpsContext.asScala, settings.asScala, log))
 
   /**
    * @deprecated in favor of method that doesn't require materializer. You can just remove the materializer argument.
@@ -662,14 +666,14 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
    */
   @Deprecated
   def singleRequest(request: HttpRequest, materializer: Materializer): CompletionStage[HttpResponse] =
-    delegate.singleRequestImpl(request.asScala).toJava
+    delegate.singleRequest(request.asScala).toJava
 
   /**
    * @deprecated in favor of method that doesn't require materializer. You can just remove the materializer argument.
    */
   @Deprecated
   def singleRequest(request: HttpRequest, connectionContext: HttpsConnectionContext, materializer: Materializer): CompletionStage[HttpResponse] =
-    delegate.singleRequestImpl(request.asScala, connectionContext.asScala).toJava
+    delegate.singleRequest(request.asScala, connectionContext.asScala).toJava
 
   /**
    * @deprecated in favor of method that doesn't require materializer. You can just remove the materializer argument.
@@ -680,7 +684,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
     connectionContext: HttpsConnectionContext,
     settings:          ConnectionPoolSettings,
     log:               LoggingAdapter, materializer: Materializer): CompletionStage[HttpResponse] =
-    delegate.singleRequestImpl(request.asScala, connectionContext.asScala, settings.asScala, log).toJava
+    delegate.singleRequest(request.asScala, connectionContext.asScala, settings.asScala, log).toJava
 
   /**
    * Fires a single [[HttpRequest]] across the (cached) host connection pool for the request's
@@ -692,7 +696,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
    * the future will be completed with an error.
    */
   def singleRequest(request: HttpRequest): CompletionStage[HttpResponse] =
-    delegate.singleRequestImpl(request.asScala).toJava
+    delegate.singleRequest(request.asScala).toJava
 
   /**
    * Fires a single [[HttpRequest]] across the (cached) host connection pool for the request's
@@ -704,7 +708,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
    * the future will be completed with an error.
    */
   def singleRequest(request: HttpRequest, connectionContext: HttpsConnectionContext): CompletionStage[HttpResponse] =
-    delegate.singleRequestImpl(request.asScala, connectionContext.asScala).toJava
+    delegate.singleRequest(request.asScala, connectionContext.asScala).toJava
 
   /**
    * Fires a single [[HttpRequest]] across the (cached) host connection pool for the request's
@@ -720,7 +724,7 @@ class Http(system: ExtendedActorSystem) extends akka.actor.Extension {
     connectionContext: HttpsConnectionContext,
     settings:          ConnectionPoolSettings,
     log:               LoggingAdapter): CompletionStage[HttpResponse] =
-    delegate.singleRequestImpl(request.asScala, connectionContext.asScala, settings.asScala, log).toJava
+    delegate.singleRequest(request.asScala, connectionContext.asScala, settings.asScala, log).toJava
 
   /**
    * Constructs a WebSocket [[akka.stream.javadsl.BidiFlow]].

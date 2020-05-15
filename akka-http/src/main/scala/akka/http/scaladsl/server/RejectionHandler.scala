@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -190,7 +190,7 @@ object RejectionHandler {
         case MalformedRequestContentRejection(msg, throwable) => {
           val rejectionMessage = "The request content was malformed:\n" + msg
           throwable match {
-            case _: EntityStreamSizeException => rejectRequestEntityAndComplete((RequestEntityTooLarge, rejectionMessage))
+            case _: EntityStreamSizeException => rejectRequestEntityAndComplete((PayloadTooLarge, rejectionMessage))
             case _                            => rejectRequestEntityAndComplete((BadRequest, rejectionMessage))
           }
         }
@@ -225,7 +225,7 @@ object RejectionHandler {
       }
       .handle {
         case TooManyRangesRejection(_) =>
-          rejectRequestEntityAndComplete((RequestedRangeNotSatisfiable, "Request contains too many ranges"))
+          rejectRequestEntityAndComplete((RangeNotSatisfiable, "Request contains too many ranges"))
       }
       .handle {
         case CircuitBreakerOpenRejection(_) =>
@@ -233,7 +233,7 @@ object RejectionHandler {
       }
       .handle {
         case UnsatisfiableRangeRejection(unsatisfiableRanges, actualEntityLength) =>
-          rejectRequestEntityAndComplete((RequestedRangeNotSatisfiable, List(`Content-Range`(ContentRange.Unsatisfiable(actualEntityLength))),
+          rejectRequestEntityAndComplete((RangeNotSatisfiable, List(`Content-Range`(ContentRange.Unsatisfiable(actualEntityLength))),
             unsatisfiableRanges.mkString("None of the following requested Ranges were satisfiable:\n", "\n", "")))
       }
       .handleAll[AuthenticationFailedRejection] { rejections =>
@@ -261,9 +261,13 @@ object RejectionHandler {
           supported.map(_.value).mkString("\n")))
       }
       .handleAll[UnsupportedRequestContentTypeRejection] { rejections =>
+        val unsupported = rejections.find(_.contentType.isDefined).flatMap(_.contentType).fold("")(" [" + _ + "]")
         val supported = rejections.flatMap(_.supported).mkString(" or ")
-        val unsupportedContentType = rejections.find(_.contentType.isDefined).map(_.contentType)
-        rejectRequestEntityAndComplete((UnsupportedMediaType, s"The request's Content-Type [$unsupportedContentType] is not supported. Expected:\n" + supported))
+        val expected =
+          if (supported.isEmpty) ""
+          else " Expected:\n" + supported
+
+        rejectRequestEntityAndComplete((UnsupportedMediaType, s"The request's Content-Type$unsupported is not supported.$expected"))
       }
       .handleAll[UnsupportedRequestEncodingRejection] { rejections =>
         val supported = rejections.map(_.supported.value).mkString(" or ")

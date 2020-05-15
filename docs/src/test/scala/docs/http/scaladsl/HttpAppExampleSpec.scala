@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl
 
 import docs.CompileOnlySpec
-import org.scalatest.{ Matchers, WordSpec }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class HttpAppExampleSpec extends WordSpec with Matchers
+class HttpAppExampleSpec extends AnyWordSpec with Matchers
   with CompileOnlySpec {
 
   "minimal-routing-example" in compileOnlySpec {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.parsing
@@ -12,7 +12,7 @@ import com.typesafe.config.{ Config, ConfigFactory }
 
 import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
-import org.scalatest.{ BeforeAndAfterAll, FreeSpec, Matchers }
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.matchers.Matcher
 import akka.util.ByteString
 import akka.actor.ActorSystem
@@ -31,8 +31,10 @@ import ParserOutput._
 import akka.http.scaladsl.model.MediaType.WithOpenCharset
 import akka.stream.stage.{ GraphStage, GraphStageLogic, InHandler, OutHandler }
 import akka.testkit._
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-abstract class ResponseParserSpec(mode: String, newLine: String) extends FreeSpec with Matchers with BeforeAndAfterAll {
+abstract class ResponseParserSpec(mode: String, newLine: String) extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
   val testConf: Config = ConfigFactory.parseString("""
     akka.event-handlers = ["akka.testkit.TestEventListener"]
     akka.loglevel = WARNING
@@ -126,6 +128,15 @@ abstract class ResponseParserSpec(mode: String, newLine: String) extends FreeSpe
           |Host: api.example.com
           |
           |Foobs""" should parseTo(HttpResponse(NotFound, List(Host("api.example.com")), "Foobs".getBytes, `HTTP/1.0`))
+        closeAfterResponseCompletion shouldEqual Seq(true)
+      }
+
+      "a response with duplicate host headers" in new Test {
+        """HTTP/1.0 404 Not Found
+          |Host: api.example.com
+          |Host: akka.io
+          |
+          |Foobs""" should parseTo(HttpResponse(NotFound, List(Host("api.example.com"), Host("akka.io")), "Foobs".getBytes, `HTTP/1.0`))
         closeAfterResponseCompletion shouldEqual Seq(true)
       }
 
@@ -240,7 +251,7 @@ abstract class ResponseParserSpec(mode: String, newLine: String) extends FreeSpe
           Right(HttpResponse(
             headers = List(`Transfer-Encoding`(TransferEncodings.Extension("fancy"))),
             entity = HttpEntity.Chunked(`application/pdf`, source()))),
-          Left(EntityStreamError(ErrorInfo("Entity stream truncation"))))
+          Left(EntityStreamError(ErrorInfo("Entity stream truncation. The HTTP parser was receiving an entity when the underlying connection was closed unexpectedly."))))
         closeAfterResponseCompletion shouldEqual Seq(false)
       }
 
@@ -292,7 +303,7 @@ abstract class ResponseParserSpec(mode: String, newLine: String) extends FreeSpe
       override def equals(other: scala.Any): Boolean = other match {
         case other: StrictEqualHttpResponse =>
 
-          this.resp.copy(entity = HttpEntity.Empty) == other.resp.copy(entity = HttpEntity.Empty) &&
+          this.resp.withEntity(HttpEntity.Empty) == other.resp.withEntity(HttpEntity.Empty) &&
             Await.result(this.resp.entity.toStrict(awaitAtMost), awaitAtMost) ==
             Await.result(other.resp.entity.toStrict(awaitAtMost), awaitAtMost)
       }

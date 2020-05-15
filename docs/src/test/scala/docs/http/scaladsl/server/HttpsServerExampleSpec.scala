@@ -1,25 +1,28 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl.server
 
 //#imports
 import java.io.InputStream
-import java.security.{ SecureRandom, KeyStore }
-import javax.net.ssl.{ SSLContext, TrustManagerFactory, KeyManagerFactory }
+import java.security.{ KeyStore, SecureRandom }
 
+import javax.net.ssl.{ KeyManagerFactory, SSLContext, TrustManagerFactory }
 import akka.actor.ActorSystem
-import akka.http.scaladsl.server.{ Route, Directives }
-import akka.http.scaladsl.{ ConnectionContext, HttpsConnectionContext, Http }
-import akka.stream.ActorMaterializer
+import akka.http.scaladsl.server.{ Directives, Route }
+import akka.http.scaladsl.{ ConnectionContext, Http, HttpsConnectionContext }
+import com.github.ghik.silencer.silent
 import com.typesafe.sslconfig.akka.AkkaSSLConfig
 //#imports
 
 import docs.CompileOnlySpec
-import org.scalatest.{ Matchers, WordSpec }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-abstract class HttpsServerExampleSpec extends WordSpec with Matchers
+// TODO https://github.com/akka/akka-http/issues/2845
+@silent("AkkaSSLConfig in package akka is deprecated")
+abstract class HttpsServerExampleSpec extends AnyWordSpec with Matchers
   with Directives with CompileOnlySpec {
 
   class HowToObtainSSLConfig {
@@ -32,7 +35,6 @@ abstract class HttpsServerExampleSpec extends WordSpec with Matchers
   "low level api" in compileOnlySpec {
     //#low-level-default
     implicit val system = ActorSystem()
-    implicit val mat = ActorMaterializer()
     implicit val dispatcher = system.dispatcher
 
     // Manual HTTPS configuration

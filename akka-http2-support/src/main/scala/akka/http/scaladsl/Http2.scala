@@ -1,21 +1,21 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl
 
 import akka.{ Done, NotUsed }
-import akka.actor.{ ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider }
+import akka.actor.{ ActorSystem, ClassicActorSystemProvider, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider }
 import akka.dispatch.ExecutionContexts
 import akka.event.LoggingAdapter
-import akka.http.impl.engine.http2.{ ProtocolSwitch, Http2AlpnSupport, Http2Blueprint }
+import akka.http.impl.engine.http2.{ Http2AlpnSupport, Http2Blueprint, ProtocolSwitch }
 import akka.http.impl.engine.server.MasterServerTerminator
 import akka.http.impl.engine.server.UpgradeToOtherProtocolResponseHeader
 import akka.http.scaladsl.Http.ServerBinding
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.settings.ServerSettings
 import akka.stream.TLSProtocol.{ SslTlsInbound, SslTlsOutbound }
-import akka.stream.scaladsl.{ BidiFlow, Flow, Keep, Source, Sink, TLS, TLSPlacebo, Tcp }
+import akka.stream.scaladsl.{ Flow, Keep, Sink, Source, TLS, TLSPlacebo, Tcp }
 import akka.http.scaladsl.model.headers.{ Connection, RawHeader, Upgrade, UpgradeProtocol }
 import akka.http.scaladsl.model.http2.{ Http2SettingsHeader, Http2StreamIdHeader }
 import akka.stream.{ IgnoreComplete, Materializer }
@@ -23,6 +23,7 @@ import akka.util.ByteString
 import com.typesafe.config.Config
 import javax.net.ssl.SSLEngine
 
+import scala.concurrent.duration.Duration
 import scala.concurrent.Future
 import scala.collection.immutable
 import scala.util.{ Failure, Success }
@@ -60,7 +61,7 @@ final class Http2Ext(private val config: Config)(implicit val system: ActorSyste
 
     val masterTerminator = new MasterServerTerminator(log)
 
-    Tcp().bind(interface, effectivePort, settings.backlog, settings.socketOptions, halfClose = false, settings.timeouts.idleTimeout)
+    Tcp().bind(interface, effectivePort, settings.backlog, settings.socketOptions, halfClose = false, Duration.Inf) // we knowingly disable idle-timeout on TCP level, as we handle it explicitly in Akka HTTP itself
       .mapAsyncUnordered(settings.maxConnections) {
         incoming: Tcp.IncomingConnection =>
           try {
@@ -102,7 +103,7 @@ final class Http2Ext(private val config: Config)(implicit val system: ActorSyste
         // https://http2.github.io/http2-spec/#Http2SettingsHeader 3.2.1 HTTP2-Settings Header Field
         val upgradeSettings = req.headers.collect {
           case raw: RawHeader if raw.lowercaseName == Http2SettingsHeader.name =>
-            Http2SettingsHeader.parse(raw.value)
+            Http2SettingsHeader.parse(raw.value, log)
         }
 
         upgradeSettings match {
@@ -164,7 +165,7 @@ final class Http2Ext(private val config: Config)(implicit val system: ActorSyste
     def setChosenProtocol(protocol: String): Unit =
       if (chosenProtocol.isEmpty) chosenProtocol = Some(protocol)
       else throw new IllegalStateException("ChosenProtocol was set twice. Http2.serverLayer is not reusable.")
-    def getChosenProtocol(): String = chosenProtocol.getOrElse("h1") // default to http/1, e.g. when ALPN jar is missing
+    def getChosenProtocol(): String = chosenProtocol.getOrElse(Http2AlpnSupport.HTTP11) // default to http/1, e.g. when ALPN jar is missing
 
     var eng: Option[SSLEngine] = None
     def createEngine(): SSLEngine = {
@@ -176,27 +177,16 @@ final class Http2Ext(private val config: Config)(implicit val system: ActorSyste
     }
     val tls = TLS(() => createEngine, _ => Success(()), IgnoreComplete)
 
-    val removeEngineOnTerminate: BidiFlow[ByteString, ByteString, ByteString, ByteString, NotUsed] = {
-      implicit val ec = fm.executionContext
-      BidiFlow.fromFlows(
-        Flow[ByteString],
-        Flow[ByteString]
-          .watchTermination()((n, fd) => {
-            fd.onComplete(_ => eng.foreach(Http2AlpnSupport.cleanupForServer))
-            n
-          })
-      )
-    }
-
     ProtocolSwitch(_ => getChosenProtocol(), http1, http2) join
-      tls join
-      removeEngineOnTerminate
+      tls
   }
 }
 
 object Http2 extends ExtensionId[Http2Ext] with ExtensionIdProvider {
   override def get(system: ActorSystem): Http2Ext = super.get(system)
-  def apply()(implicit system: ActorSystem): Http2Ext = super.apply(system)
+  override def get(system: ClassicActorSystemProvider): Http2Ext = super.get(system)
+  def apply()(implicit system: ClassicActorSystemProvider): Http2Ext = super.apply(system)
+  override def apply(system: ActorSystem): Http2Ext = super.apply(system)
   def lookup(): ExtensionId[_ <: Extension] = Http2
   def createExtension(system: ExtendedActorSystem): Http2Ext =
     new Http2Ext(system.settings.config getConfig "akka.http")(system)

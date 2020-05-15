@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.http2
@@ -30,7 +30,6 @@ import com.twitter.hpack.{ Decoder, Encoder, HeaderListener }
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
-import scala.annotation.tailrec
 import scala.collection.immutable
 import scala.collection.immutable.VectorBuilder
 import scala.concurrent.{ Await, Future, Promise }
@@ -202,6 +201,42 @@ class Http2ServerSpec extends AkkaSpecWithMaterializer("""
         sendHEADERS(streamId, endStream = true, endHeaders = true, requestHeaderBlock)
         expectRequest().headers shouldBe expectedRequest.headers
       }
+
+      "acknowledge change to SETTINGS_HEADER_TABLE_SIZE in next HEADER frame" in new TestSetup with RequestResponseProbes {
+        sendSETTING(SettingIdentifier.SETTINGS_HEADER_TABLE_SIZE, 8192)
+        expectSettingsAck()
+
+        val headerBlock = HPackSpecExamples.C41FirstRequestWithHuffman
+
+        sendHEADERS(1, endStream = true, endHeaders = true, headerBlock)
+        requestIn.ensureSubscription()
+        requestIn.expectNoMessage(remainingOrDefault)
+
+        val request = expectRequestRaw()
+
+        request.method shouldBe HttpMethods.GET
+        request.uri shouldBe Uri("http://www.example.com/")
+
+        val streamIdHeader = request.header[Http2StreamIdHeader].getOrElse(Http2Compliance.missingHttpIdHeaderException)
+        responseOut.sendNext(HPackSpecExamples.FirstResponse.addHeader(streamIdHeader))
+        val headerPayload = expectHeaderBlock(1)
+
+        // Dynamic Table Size Update (https://tools.ietf.org/html/rfc7541#section-6.3) is
+        //
+        // 0   1   2   3   4   5   6   7
+        // +---+---+---+---+---+---+---+---+
+        // | 0 | 0 | 1 |   Max size (5+)   |
+        // +---+---------------------------+
+        //
+        // 8192 is 10000000000000 = 14 bits, i.e. needs more than 4 bits
+        // 8192 - 16 = 8176 = 111111 1110000
+        // 001 11111 = 63
+        // 1 1110000 = 225
+        // 0 0111111 = 63
+
+        val dynamicTableUpdateTo8192 = ByteString(63, 225, 63)
+        headerPayload shouldBe dynamicTableUpdateTo8192 ++ HPackSpecExamples.C61FirstResponseWithHuffman
+      }
     }
 
     "support stream for request entity data" should {
@@ -266,6 +301,25 @@ class Http2ServerSpec extends AkkaSpecWithMaterializer("""
         sendRST_STREAM(TheStreamId, ErrorCode.INTERNAL_ERROR)
         val error = entityDataIn.expectError()
         error.getMessage shouldBe "Stream with ID [1] was closed by peer with code INTERNAL_ERROR(0x02)"
+      }
+
+      // Reproducing https://github.com/akka/akka-http/issues/2957
+      "close the stream when we receive a RST after we have half-closed ourselves as well" in new WaitingForRequestData {
+        // Client sends the request, but doesn't close the stream yet. This is a bit weird, but it's whet grpcurl does ;)
+        sendHEADERS(streamId = 1, endStream = false, endHeaders = true, encodeRequestHeaders(request))
+        sendDATA(streamId = 1, endStream = false, ByteString(0, 0, 0, 0, 0x10, 0x22, 0x0e) ++ ByteString.fromString("GreeterService"))
+
+        // We emit a 404 response, half-closing the stream.
+        emitResponse(streamId = 1, HttpResponse(StatusCodes.NotFound))
+
+        // We don't want to see warnings (which we used to see)
+        EventFilter.warning(occurrences = 0).intercept {
+          // The client closes the stream with a protocol error. This is somewhat questionable but it's what grpc-go does
+          sendRST_STREAM(streamId = 1, ErrorCode.PROTOCOL_ERROR)
+          entityDataIn.expectError()
+          // Wait to give the warning (that we hope not to see) time to pop up.
+          Thread.sleep(3000)
+        }
       }
       "not fail the whole connection when one stream is RST twice" in new WaitingForRequestData {
         sendRST_STREAM(TheStreamId, ErrorCode.STREAM_CLOSED)
@@ -1045,7 +1099,7 @@ class Http2ServerSpec extends AkkaSpecWithMaterializer("""
 
         pollForWindowUpdates(duration)
       } catch {
-        case e: AssertionError if e.getMessage contains "Expected OnNext(_), yet no element signaled during" =>
+        case e: AssertionError if e.getMessage contains "but only got [0] bytes" =>
         // timeout, that's expected
         case e: AssertionError if (e.getMessage contains "block took") && (e.getMessage contains "exceeding") =>
           // pause like GC, poll again just to be sure
@@ -1157,10 +1211,10 @@ class Http2ServerSpec extends AkkaSpecWithMaterializer("""
     }
     def decodeHeadersToResponse(bytes: ByteString): HttpResponse =
       decodeHeaders(bytes).foldLeft(HttpResponse())((old, header) => header match {
-        case (":status", value)                             => old.copy(status = value.toInt)
-        case ("content-length", value) if value.toLong == 0 => old.copy(entity = HttpEntity.Empty)
-        case ("content-length", value)                      => old.copy(entity = HttpEntity.Default(old.entity.contentType, value.toLong, Source.empty))
-        case ("content-type", value)                        => old.copy(entity = old.entity.withContentType(ContentType.parse(value).right.get))
+        case (":status", value)                             => old.withStatus(value.toInt)
+        case ("content-length", value) if value.toLong == 0 => old.withEntity(HttpEntity.Empty)
+        case ("content-length", value)                      => old.withEntity(HttpEntity.Default(old.entity.contentType, value.toLong, Source.empty))
+        case ("content-type", value)                        => old.withEntity(old.entity.withContentType(ContentType.parse(value).right.get))
         case (name, value)                                  => old.addHeader(RawHeader(name, value)) // FIXME: decode to modeled headers
       })
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.parsing
@@ -11,7 +11,7 @@ import com.typesafe.config.{ Config, ConfigFactory }
 
 import scala.annotation.tailrec
 import scala.util.Random
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
+import org.scalatest.BeforeAndAfterAll
 import akka.util.ByteString
 import akka.actor.ActorSystem
 import akka.http.HashCodeCollider
@@ -21,8 +21,10 @@ import akka.http.impl.model.parser.CharacterClasses
 import akka.http.impl.util._
 import akka.http.scaladsl.settings.ParserSettings.IllegalResponseHeaderValueProcessingMode
 import akka.testkit.{ EventFilter, TestKit }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-abstract class HttpHeaderParserSpec(mode: String, newLine: String) extends WordSpec with Matchers with BeforeAndAfterAll {
+abstract class HttpHeaderParserSpec(mode: String, newLine: String) extends AnyWordSpec with Matchers with BeforeAndAfterAll {
 
   val testConf: Config = ConfigFactory.parseString("""
     akka.event-handlers = ["akka.testkit.TestEventListener"]
@@ -181,6 +183,16 @@ abstract class HttpHeaderParserSpec(mode: String, newLine: String) extends WordS
         RawHeader("4-UTF8-Bytes", "Surrogate pairs: \uD801\uDC1B\uD801\uDC04\uD801\uDC1B!")
     }
 
+    "parse multiple header lines subsequently with UTF-8 characters one after another without crashing" in new TestSetup {
+      parseLine(s"""Content-Disposition: form-data; name="test"; filename="λ"${newLine}x""")
+      // The failing parsing line is one that must share a prefix with the utf-8 line up to the non-ascii char. The next character
+      // doesn't even have to be a non-ascii char.
+      parseLine(s"""Content-Disposition: form-data; name="test"; filename="test"${newLine}x""")
+      // But it could be
+      parseLine(s"""Content-Disposition: form-data; name="test"; filename="Б"${newLine}x""")
+
+    }
+
     "produce an error message for lines with an illegal header name" in new TestSetup() {
       the[ParsingException] thrownBy parseLine(s" Connection: close${newLine}x") should have message "Illegal character ' ' in header name"
       the[ParsingException] thrownBy parseLine(s"Connection : close${newLine}x") should have message "Illegal character ' ' in header name"
@@ -288,7 +300,7 @@ abstract class HttpHeaderParserSpec(mode: String, newLine: String) extends WordS
       val regularKeys = Iterator.from(1).map(i => s"key_$i").take(numKeys)
       private val zeroHashStrings: Iterator[String] = HashCodeCollider.zeroHashCodeIterator()
       val collidingKeys = zeroHashStrings
-        .filter(_.forall(CharacterClasses.tchar))
+        .filter(_.forall(ch => CharacterClasses.tchar(ch)))
         .take(numKeys)
 
       def createHeader(keys: Iterator[String]): String = "Accept: text/plain" + keys.mkString(";", "=x;", "=x") + newLine + "x"

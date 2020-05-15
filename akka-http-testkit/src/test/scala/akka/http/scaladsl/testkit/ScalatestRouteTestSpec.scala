@@ -1,12 +1,10 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.testkit
 
 import scala.concurrent.duration._
-import org.scalatest.FreeSpec
-import org.scalatest.Matchers
 import akka.testkit._
 import akka.util.Timeout
 import akka.pattern.ask
@@ -16,11 +14,15 @@ import akka.http.scaladsl.model._
 import StatusCodes._
 import HttpMethods._
 import Directives._
+import org.scalatest.exceptions.TestFailedException
+import headers.`X-Forwarded-Proto`
 
 import scala.concurrent.Await
 import scala.concurrent.Future
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class ScalatestRouteTestSpec extends FreeSpec with Matchers with ScalatestRouteTest {
+class ScalatestRouteTestSpec extends AnyFreeSpec with Matchers with ScalatestRouteTest {
 
   "The ScalatestRouteTest should support" - {
 
@@ -38,6 +40,20 @@ class ScalatestRouteTestSpec extends FreeSpec with Matchers with ScalatestRouteT
         status shouldEqual OK
         responseEntity shouldEqual HttpEntity(ContentTypes.`text/plain(UTF-8)`, "abc")
         header("Fancy") shouldEqual Some(pinkHeader)
+      }
+    }
+
+    "a test using ~!> and some checks" in {
+      // raw here, should have been parsed into modelled header when going through an actual server when using `~!>`
+      val extraHeader = RawHeader("X-Forwarded-Proto", "abc")
+      Get() ~!> {
+        respondWithHeader(extraHeader) {
+          complete("abc")
+        }
+      } ~> check {
+        status shouldEqual OK
+        responseEntity shouldEqual HttpEntity(ContentTypes.`text/plain(UTF-8)`, "abc")
+        header[`X-Forwarded-Proto`].get shouldEqual `X-Forwarded-Proto`("abc")
       }
     }
 
@@ -84,6 +100,28 @@ class ScalatestRouteTestSpec extends FreeSpec with Matchers with ScalatestRouteT
         responseEntity shouldEqual HttpEntity(ContentTypes.`text/plain(UTF-8)`, "abc")
         header("Fancy") shouldEqual Some(pinkHeader)
       }(result)
+    }
+
+    "failing the test inside the route" in {
+
+      val route = get {
+        fail()
+      }
+
+      assertThrows[TestFailedException] {
+        Get() ~> route
+      }
+    }
+
+    "internal server error" in {
+
+      val route = get {
+        throw new RuntimeException("BOOM")
+      }
+
+      Get() ~> route ~> check {
+        status shouldEqual InternalServerError
+      }
     }
   }
 }

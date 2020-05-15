@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.model
@@ -8,11 +8,12 @@ import java.nio.charset.Charset
 import java.net.InetAddress
 import akka.http.impl.util.StringRendering
 import org.scalatest.matchers.{ MatchResult, Matcher }
-import org.scalatest.{ Matchers, WordSpec }
 import akka.parboiled2.UTF8
 import Uri._
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class UriSpec extends WordSpec with Matchers {
+class UriSpec extends AnyWordSpec with Matchers {
 
   "Uri.Host instances" should {
 
@@ -316,7 +317,7 @@ class UriSpec extends WordSpec with Matchers {
       //query component "a=b" is parsed into parameter name: "a", and value: "b"
       strict("a=b") shouldEqual ("a", "b") +: Query.Empty
 
-      strict("") shouldEqual ("", "") +: Query.Empty
+      strict("") shouldEqual Query.Empty
       strict("a") shouldEqual ("a", "") +: Query.Empty
       strict("a=") shouldEqual ("a", "") +: Query.Empty
       strict("a=+") shouldEqual ("a", " ") +: Query.Empty //'+' is parsed to ' '
@@ -384,7 +385,7 @@ class UriSpec extends WordSpec with Matchers {
       def relaxed(queryString: String): Query = Query(queryString, mode = Uri.ParsingMode.Relaxed)
       //#query-relaxed-mode
 
-      relaxed("") shouldEqual ("", "") +: Query.Empty
+      relaxed("") shouldEqual Query.Empty
       relaxed("a") shouldEqual ("a", "") +: Query.Empty
       relaxed("a=") shouldEqual ("a", "") +: Query.Empty
       relaxed("a=+") shouldEqual ("a", " ") +: Query.Empty
@@ -412,6 +413,7 @@ class UriSpec extends WordSpec with Matchers {
 
       relaxed("a=b?c") shouldEqual ("a", "b?c") +: Query.Empty
       relaxed("a=b/c") shouldEqual ("a", "b/c") +: Query.Empty
+      relaxed("a=b|c") shouldEqual ("a", "b|c") +: Query.Empty
 
       //#query-relaxed-mode-success
       relaxed("a^=b") shouldEqual ("a^", "b") +: Query.Empty
@@ -459,12 +461,14 @@ class UriSpec extends WordSpec with Matchers {
       Query("a&b" -> "c").toString() shouldEqual "a%26b=c"
       Query("a+b" -> "c").toString() shouldEqual "a%2Bb=c"
       Query("a;b" -> "c").toString() shouldEqual "a%3Bb=c"
+      Query("a|b" -> "c").toString() shouldEqual "a%7Cb=c"
     }
     "encode special separators in query parameter values" in {
       Query("a" -> "b=c").toString() shouldEqual "a=b%3Dc"
       Query("a" -> "b&c").toString() shouldEqual "a=b%26c"
       Query("a" -> "b+c").toString() shouldEqual "a=b%2Bc"
       Query("a" -> "b;c").toString() shouldEqual "a=b%3Bc"
+      Query("a" -> "b|c").toString() shouldEqual "a=b%7Cc"
     }
   }
 
@@ -528,6 +532,12 @@ class UriSpec extends WordSpec with Matchers {
       // empty host
       Uri("http://:8000/foo") shouldEqual Uri("http", Authority(Host.Empty, 8000), Path / "foo")
       Uri("http://:80/foo") shouldEqual Uri("http", Authority(Host.Empty, 0), Path / "foo")
+
+      Uri("").query() shouldBe empty
+      Uri("").query().toMap shouldBe empty
+
+      Uri("?").query() shouldBe empty
+      Uri("?").query().toMap shouldBe empty
     }
 
     "properly complete a normalization cycle" in {
@@ -582,7 +592,8 @@ class UriSpec extends WordSpec with Matchers {
       normalize("?key") shouldEqual "?key"
       normalize("?key=") shouldEqual "?key="
       normalize("?key=&a=b") shouldEqual "?key=&a=b"
-      normalize("?key={}&a=[]") shouldEqual "?key={}&a=[]"
+      normalize("?key={}&a=[]") shouldEqual "?key=%7B%7D&a=%5B%5D"
+      normalize("?key=%7B%7D&a=%5B%5D") shouldEqual "?key=%7B%7D&a=%5B%5D"
       normalize("?=value") shouldEqual "?=value"
       normalize("?key=value") shouldEqual "?key=value"
       normalize("?a+b") shouldEqual "?a+b"
@@ -592,6 +603,10 @@ class UriSpec extends WordSpec with Matchers {
       normalize("?a=1&b=2") shouldEqual "?a=1&b=2"
       normalize("?a+b=c%2Bd") shouldEqual "?a+b=c%2Bd"
       normalize("?a&a") shouldEqual "?a&a"
+      normalize("?foo\"bar") shouldEqual "?foo%22bar"
+      a[IllegalUriException] should be thrownBy normalize("?foo\"bar", mode = Uri.ParsingMode.Strict)
+      normalize("?foo|bar") shouldEqual "?foo%7Cbar"
+      a[IllegalUriException] should be thrownBy normalize("?foo|bar", mode = Uri.ParsingMode.Strict)
       normalize("?&#") shouldEqual "?&#"
       normalize("?#") shouldEqual "?#"
       normalize("#") shouldEqual "#"
@@ -640,6 +655,21 @@ class UriSpec extends WordSpec with Matchers {
           "Illegal URI reference: Unexpected end of input, expected HEXDIG (line 1, column 31)",
           "http://www.example.com/%CE%B8%\n" +
             "                              ^")
+      }
+
+      // illegal percent-encoding in a query string
+      the[IllegalUriException] thrownBy Uri("http://host?use%2G") shouldBe {
+        IllegalUriException(
+          "Illegal URI reference: Invalid input 'G', expected HEXDIG (line 1, column 18)",
+          "http://host?use%2G\n" +
+            "                 ^")
+      }
+      // illegal percent-encoding in a fragment
+      the[IllegalUriException] thrownBy Uri("http://host#use%2G") shouldBe {
+        IllegalUriException(
+          "Illegal URI reference: Invalid input 'G', expected HEXDIG (line 1, column 18)",
+          "http://host#use%2G\n" +
+            "                 ^")
       }
 
       // illegal path
@@ -753,6 +783,10 @@ class UriSpec extends WordSpec with Matchers {
       uri.withQuery(Query(Map("param1" -> "value1"))) shouldEqual Uri("http://host/path?param1=value1#fragment")
       uri.withRawQueryString("param1=value1") shouldEqual Uri("http://host/path?param1=value1#fragment")
 
+      uri.withQuery(Query("param1" -> "val\"ue1")) shouldEqual Uri("http://host/path?param1=val%22ue1#fragment")
+      uri.withRawQueryString("param1=val%22ue1") shouldEqual Uri("http://host/path?param1=val%22ue1#fragment")
+      uri.withRawQueryString("param1=val\"ue1") shouldEqual Uri("http://host/path?param1=val%22ue1#fragment")
+
       uri.withFragment("otherFragment") shouldEqual Uri("http://host/path?query#otherFragment")
     }
 
@@ -795,6 +829,14 @@ class UriSpec extends WordSpec with Matchers {
     "properly render as HTTP request target origin forms" in {
       Uri("http://example.com/foo/bar?query=1#frag").toHttpRequestTargetOriginForm.toString shouldEqual "/foo/bar?query=1"
       Uri("http://example.com//foo/bar?query=1#frag").toHttpRequestTargetOriginForm.toString shouldEqual "//foo/bar?query=1"
+    }
+
+    "properly render query strings with invalid values" in {
+      val uri = Uri("http://host/path?query#fragment")
+      uri.withQuery(Query("param1" -> "val\"ue1")).toString shouldEqual "http://host/path?param1=val%22ue1#fragment"
+      uri.withRawQueryString("param1=val%22ue1").toString shouldEqual "http://host/path?param1=val%22ue1#fragment"
+      uri.withRawQueryString("param1=val\"ue1").toString shouldEqual "http://host/path?param1=val%22ue1#fragment"
+      uri.withRawQueryString("param1=val|ue1").toString shouldEqual "http://host/path?param1=val%7Cue1#fragment"
     }
 
     "survive parsing a URI with thousands of path segments" in {

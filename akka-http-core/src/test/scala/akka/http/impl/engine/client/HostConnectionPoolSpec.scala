@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.client
@@ -137,6 +137,31 @@ class HostConnectionPoolSpec extends AkkaSpecWithMaterializer(
         resBodyIn.request(1) // FIXME: should we support eager completion here? (reason is substreamHandler in PrepareResponse)
         resBodyIn.expectComplete()
       }
+      "not crash slot when connection is aborted after an early response while waiting for rest of request entity" inWithShutdown new SetupWithServerProbes {
+        // #1439
+        val reqEntityProbe = pushChunkedRequest()
+        responseOut.request(1)
+
+        val conn1 = expectNextConnection()
+        val reqInProbe = conn1.expectChunkedRequestBytesAsProbe()
+
+        // request coming in
+        reqEntityProbe.sendNext(ByteString("test"))
+        reqInProbe.expectUtf8EncodedString("test")
+
+        // ...
+        reqEntityProbe.sendNext(ByteString("test2"))
+        reqInProbe.expectUtf8EncodedString("test2")
+
+        conn1.failHandler(new RuntimeException("test"))
+
+        // In #1439, the next request now ran into a broken slot and the request is dropped to the floor
+        pushRequest()
+        val conn2 = expectNextConnection()
+        conn2.expectRequest()
+        conn2.pushResponse()
+        expectResponse()
+      }
       "open up to max-connections when enough requests are pending" inWithShutdown new SetupWithServerProbes(_.withMaxConnections(2)) {
         pushRequest(HttpRequest(uri = "/1"))
         val conn1 = expectNextConnection()
@@ -178,7 +203,7 @@ class HostConnectionPoolSpec extends AkkaSpecWithMaterializer(
         pendingIn(targetImpl = LegacyPoolImplementation) // not implemented in legacy
         pendingIn(targetTrans = PassThrough) // infra seems to be missing something
 
-        // FIXME: set subscription timeout to value relating to below `expectNoMsg`
+        // FIXME: set subscription timeout to value relating to below `expectNoMessage`
 
         pushRequest(HttpRequest(uri = "/1"))
         val conn1 = expectNextConnection()
@@ -194,7 +219,7 @@ class HostConnectionPoolSpec extends AkkaSpecWithMaterializer(
         val streamResult = chunks.runWith(Sink.ignore)
         Await.ready(streamResult, 3.seconds)
         streamResult.value.get.failed.get.getMessage shouldEqual
-          "Response entity was not subscribed after 1 second. Make sure to read the response entity body or call `discardBytes()` on it. GET /1 Empty -> 200 OK Chunked"
+          "Response entity was not subscribed after 1 second. Make sure to read the response `entity` body or call `entity.discardBytes()` on it -- in case you deal with `HttpResponse`, use the shortcut `response.discardEntityBytes()`. GET /1 Empty -> 200 OK Chunked"
         conn1.expectError()
       }
       "time out when a connection was unused for a long time" in pending
@@ -208,9 +233,15 @@ class HostConnectionPoolSpec extends AkkaSpecWithMaterializer(
         reqBytesOut.sendNext(ByteString("hello"))
         reqBytesIn.expectUtf8EncodedString("hello")
 
-        reqBytesOut.sendError(new RuntimeException("oops, could not finish sending request"))
+        val theError = new RuntimeException("oops, could not finish sending request")
 
-        expectResponseError()
+        // make sure these errors are not noisily logged
+        EventFilter[RuntimeException](occurrences = 0).intercept {
+          reqBytesOut.sendError(theError)
+
+          val error = expectResponseError()
+          error shouldBe theError
+        }
 
         // FIXME: it seems on TCP cancellation might overtake the error on the server-side so we get a cancellation / regular completion here
         // conn1.serverRequests.expectError()

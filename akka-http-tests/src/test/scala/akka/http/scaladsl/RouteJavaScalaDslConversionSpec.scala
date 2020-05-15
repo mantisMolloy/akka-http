@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl
@@ -7,9 +7,9 @@ package akka.http.scaladsl
 import java.util.function.Supplier
 
 import akka.http.javadsl.server.Route
-import org.scalatest.WordSpec
+import org.scalatest.wordspec.AnyWordSpec
 
-class RouteJavaScalaDslConversionSpec extends WordSpec {
+class RouteJavaScalaDslConversionSpec extends AnyWordSpec {
 
   "Routes" must {
 

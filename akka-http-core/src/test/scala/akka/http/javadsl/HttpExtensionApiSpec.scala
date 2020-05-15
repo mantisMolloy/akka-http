@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl
@@ -13,38 +13,28 @@ import akka.http.javadsl.ConnectHttp._
 import akka.http.javadsl.model.ws._
 import akka.http.javadsl.settings.{ ClientConnectionSettings, ConnectionPoolSettings, ServerSettings }
 import akka.japi.Pair
-import akka.actor.ActorSystem
 import akka.event.NoLogging
+import akka.http.impl.util.AkkaSpecWithMaterializer
 import akka.http.javadsl.model._
 import akka.japi.Function
-import akka.stream.ActorMaterializer
 import akka.stream.javadsl.{ Flow, Keep, Sink, Source }
 import akka.stream.testkit.TestSubscriber
-import akka.testkit.TestKit
-import com.typesafe.config.ConfigFactory
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
 
 import scala.util.Try
 
-class HttpExtensionApiSpec extends WordSpec with Matchers with BeforeAndAfterAll {
+class HttpExtensionApiSpec extends AkkaSpecWithMaterializer(
+  """
+    akka.http.server.log-unencrypted-network-bytes = 100
+    akka.http.client.log-unencrypted-network-bytes = 100
+    akka.http.server.request-timeout = infinite
+    akka.io.tcp.trace-logging = true
+  """
+) {
 
   // tries to cover all surface area of javadsl.Http
 
   type Host = String
   type Port = Int
-
-  implicit val system = {
-    val testConf = ConfigFactory.parseString("""
-    akka.loggers = ["akka.testkit.TestEventListener"]
-    akka.loglevel = ERROR
-    akka.stdout-loglevel = ERROR
-    windows-connection-abort-workaround-enabled = auto
-    akka.log-dead-letters = OFF
-    akka.http.server.request-timeout = infinite""")
-
-    ActorSystem(getClass.getSimpleName, testConf)
-  }
-  implicit val materializer = ActorMaterializer()
 
   val http = Http.get(system)
   val connectionContext = ConnectionContext.noEncryption()
@@ -407,6 +397,4 @@ class HttpExtensionApiSpec extends WordSpec with Matchers with BeforeAndAfterAll
 
   private def waitFor[T](completionStage: CompletionStage[T]): T =
     completionStage.toCompletableFuture.get(10, TimeUnit.SECONDS)
-
-  override protected def afterAll() = TestKit.shutdownActorSystem(system)
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl
@@ -8,11 +8,12 @@ import java.lang.reflect.{ Modifier, Method }
 
 import akka.http.javadsl.server.directives.CorrespondsTo
 import org.scalatest.exceptions.TestPendingException
-import org.scalatest.{ Matchers, WordSpec }
 
 import scala.util.control.NoStackTrace
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class DirectivesConsistencySpec extends WordSpec with Matchers {
+class DirectivesConsistencySpec extends AnyWordSpec with Matchers {
 
   val scalaDirectivesClazz = classOf[akka.http.scaladsl.server.Directives]
   val javaDirectivesClazz = classOf[akka.http.javadsl.server.AllDirectives]
@@ -22,7 +23,7 @@ class DirectivesConsistencySpec extends WordSpec with Matchers {
       Set("productArity", "canEqual", "productPrefix", "copy", "productIterator", "productElement",
         "concat", "route") ++ // TODO this fails on jenkins but not locally, no idea why, disabling to get Java DSL in
         // param extractions in ScalaDSL
-        Set("DoubleNumber", "HexIntNumber", "HexLongNumber", "IntNumber", "JavaUUID", "LongNumber",
+        Set("not", "DoubleNumber", "HexIntNumber", "HexLongNumber", "IntNumber", "JavaUUID", "LongNumber",
           "Neutral", "PathEnd", "Remaining", "Segment", "Segments", "Slash", "RemainingPath") // TODO do we cover these?
 
   def prepareDirectivesList(in: Array[Method]): List[Method] = {

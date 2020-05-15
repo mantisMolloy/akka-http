@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -15,10 +15,6 @@ import java.net.InetAddress
 import akka.http.scaladsl.server.util.VarArgsFunction1
 
 class MiscDirectivesSpec extends RoutingSpec {
-
-  override def testConfigSource = """
-    akka.loggers = ["akka.testkit.TestEventListener"]
-  """
 
   "the extractClientIP directive" should {
     "extract from a X-Forwarded-For header" in {
@@ -101,8 +97,8 @@ class MiscDirectivesSpec extends RoutingSpec {
       }
 
       Post("/abc", entityOfSize(501)) ~> Route.seal(route) ~> check {
-        status shouldEqual StatusCodes.RequestEntityTooLarge
-        entityAs[String] should include("exceeded content length limit")
+        status shouldEqual StatusCodes.PayloadTooLarge
+        entityAs[String] should include("exceeded size limit")
       }
     }
 
@@ -119,12 +115,13 @@ class MiscDirectivesSpec extends RoutingSpec {
       }
 
       Post("/abc", formDataOfSize(128)) ~> Route.seal(route) ~> check {
-        status shouldEqual StatusCodes.RequestEntityTooLarge
+        status shouldEqual StatusCodes.PayloadTooLarge
         responseAs[String] shouldEqual "The request content was malformed:\n" +
-          "EntityStreamSizeException: actual entity size (Some(134)) " +
-          "exceeded content length limit (64 bytes)! " +
-          "You can configure this by setting `akka.http.[server|client].parsing.max-content-length` " +
-          "or calling `HttpEntity.withSizeLimit` before materializing the dataBytes stream."
+          "EntityStreamSizeException: incoming entity size (134) " +
+          "exceeded size limit (64 bytes)! " +
+          "This may have been a parser limit (set via `akka.http.[server|client].parsing.max-content-length`), " +
+          "a decoder limit (set via `akka.http.routing.decode-max-size`), " +
+          "or a custom limit set with `withSizeLimit`."
       }
     }
 
@@ -143,8 +140,8 @@ class MiscDirectivesSpec extends RoutingSpec {
       }
 
       Post("/abc", entityOfSize(801)) ~> Route.seal(route) ~> check {
-        status shouldEqual StatusCodes.RequestEntityTooLarge
-        entityAs[String] should include("exceeded content length limit")
+        status shouldEqual StatusCodes.PayloadTooLarge
+        entityAs[String] should include("exceeded size limit")
       }
 
       val route2 =
@@ -161,8 +158,8 @@ class MiscDirectivesSpec extends RoutingSpec {
       }
 
       Post("/abc", entityOfSize(401)) ~> Route.seal(route2) ~> check {
-        status shouldEqual StatusCodes.RequestEntityTooLarge
-        entityAs[String] should include("exceeded content length limit")
+        status shouldEqual StatusCodes.PayloadTooLarge
+        entityAs[String] should include("exceeded size limit")
       }
     }
   }

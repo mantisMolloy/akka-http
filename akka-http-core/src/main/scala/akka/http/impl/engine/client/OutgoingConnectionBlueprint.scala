@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.client
@@ -96,7 +96,7 @@ private[http] object OutgoingConnectionBlueprint {
 
       val terminationFanout = b.add(Broadcast[HttpResponse](2))
 
-      val logger = b.add(Flow[ByteString].mapError { case t => log.error(t, "Outgoing request stream error"); t }.named("errorLogger"))
+      val logger = b.add(Flow[ByteString].mapError { case t => log.debug(s"Outgoing request stream error {}", t); t }.named("errorLogger"))
       val wrapTls = b.add(Flow[ByteString].map(SendBytes))
 
       val collectSessionBytes = b.add(Flow[SslTlsInbound].collect { case s: SessionBytes => s })

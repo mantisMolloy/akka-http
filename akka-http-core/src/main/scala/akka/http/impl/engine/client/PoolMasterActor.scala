@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.client
@@ -113,7 +113,7 @@ private[http] final class PoolMasterActor extends Actor with ActorLogging {
       def track(remaining: Iterator[Future[Done]]): Unit =
         if (remaining.hasNext) remaining.next().onComplete(_ => track(remaining))
         else shutdownCompletedPromise.trySuccess(Done)
-      track(poolStatus.keys.map(_.shutdown()).toIterator)
+      track(poolStatus.keys.map(_.shutdown()).iterator)
 
     case HasBeenShutdown(pool, reason) =>
       poolInterfaces.get(pool).foreach { gateway =>

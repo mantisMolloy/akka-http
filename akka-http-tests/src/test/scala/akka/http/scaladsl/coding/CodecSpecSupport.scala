@@ -1,14 +1,15 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.coding
 
-import org.scalatest.{ BeforeAndAfterAll, Matchers, Suite }
+import org.scalatest.{ BeforeAndAfterAll, Suite }
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import akka.util.ByteString
+import org.scalatest.matchers.should.Matchers
 
 trait CodecSpecSupport extends Matchers with BeforeAndAfterAll { self: Suite =>
 

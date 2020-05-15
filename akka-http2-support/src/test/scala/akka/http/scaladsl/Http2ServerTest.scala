@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl
@@ -11,12 +11,12 @@ import akka.http.impl.util.ExampleHttpContexts
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.Unmarshal
-import akka.stream._
 import akka.stream.scaladsl.FileIO
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.Await
+import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.io.StdIn
@@ -27,7 +27,6 @@ import scala.util.Random
  */
 object Http2ServerTest extends App {
   val testConf: Config = ConfigFactory.parseString("""
-    akka.loglevel = INFO
     akka.log-dead-letters = off
     akka.stream.materializer.debug.fuzzing-mode = off
     akka.actor.serialize-creators = off
@@ -37,13 +36,7 @@ object Http2ServerTest extends App {
     akka.http.server.preview.enable-http2 = true
                                                    """)
   implicit val system = ActorSystem("ServerTest", testConf)
-  import system.dispatcher
-
-  val settings = ActorMaterializerSettings(system)
-    .withFuzzing(false)
-    //    .withSyncProcessingLimit(Int.MaxValue)
-    .withInputBuffer(128, 128)
-  implicit val fm = ActorMaterializer(settings)
+  implicit val ec: ExecutionContext = system.dispatcher
 
   def slowDown[T](millis: Int): T => Future[T] = { t =>
     akka.pattern.after(millis.millis, system.scheduler)(Future.successful(t))

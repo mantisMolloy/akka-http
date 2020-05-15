@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server.directives
@@ -312,7 +312,7 @@ class PathDirectivesSpec extends RoutingSpec with Inside {
   }
 
   """pathPrefix("foo".?)""" should {
-    val test = testFor(pathPrefix("foo".?) { echoUnmatchedPath })
+    val test = testFor(pathPrefix("foo".optional) { echoUnmatchedPath })
     "accept [/foo]" inThe test("")
     "accept [/fool]" inThe test("l")
     "accept [/bar]" inThe test("bar")

@@ -1,15 +1,15 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.settings
 
 import com.typesafe.config.ConfigFactory
 
-import org.scalatest.Matchers
-import org.scalatest.WordSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class SettingsEqualitySpec extends WordSpec with Matchers {
+class SettingsEqualitySpec extends AnyWordSpec with Matchers {
 
   val config = ConfigFactory.load.resolve
 

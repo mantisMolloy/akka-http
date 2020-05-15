@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.settings
@@ -8,6 +8,7 @@ import java.util
 import java.util.Optional
 import java.util.function.Function
 
+import akka.actor.ClassicActorSystemProvider
 import akka.annotation.DoNotInherit
 import akka.http.impl.settings.ParserSettingsImpl
 import akka.http.impl.util._
@@ -160,4 +161,6 @@ object ParserSettings extends SettingsCompanion[ParserSettings] {
 
   override def apply(config: Config): ParserSettings = ParserSettingsImpl(config)
   override def apply(configOverrides: String): ParserSettings = ParserSettingsImpl(configOverrides)
+
+  def forServer(implicit system: ClassicActorSystemProvider): ParserSettings = ParserSettingsImpl.forServer(system.classicSystem.settings.config)
 }

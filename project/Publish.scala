@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka
@@ -53,7 +53,9 @@ object DeployRsync extends AutoPlugin {
     deployRsync := {
       val (_, host) = (Space ~ StringBasic).parsed
       deployRsyncArtifact.value.foreach {
-        case (from, to) => s"rsync -rvz $from/ $host:$to"!
+        case (from, to) =>
+          val result = Seq("rsync", "-rvz", s"$from/", s"$host:$to").!
+          require(result == 0, "rsync should return success")
       }
     }
   )

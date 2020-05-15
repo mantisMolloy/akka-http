@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.parsing
@@ -15,7 +15,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
 import akka.stream.TLSProtocol._
 import org.scalatest.matchers.Matcher
-import org.scalatest.{ BeforeAndAfterAll, FreeSpec, Matchers }
+import org.scalatest.BeforeAndAfterAll
 import akka.http.scaladsl.settings.{ ParserSettings, WebSocketSettings }
 import akka.http.impl.engine.parsing.ParserOutput._
 import akka.http.impl.settings.WebSocketSettingsImpl
@@ -32,8 +32,10 @@ import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.util.FastFuture
 import akka.http.scaladsl.util.FastFuture._
 import akka.testkit._
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-abstract class RequestParserSpec(mode: String, newLine: String) extends FreeSpec with Matchers with BeforeAndAfterAll {
+abstract class RequestParserSpec(mode: String, newLine: String) extends AnyFreeSpec with Matchers with BeforeAndAfterAll {
   val testConf: Config = ConfigFactory.parseString("""
     akka.event-handlers = ["akka.testkit.TestEventListener"]
     akka.loglevel = WARNING
@@ -536,16 +538,26 @@ abstract class RequestParserSpec(mode: String, newLine: String) extends FreeSpec
           ErrorInfo("HTTP message must not contain more than one Content-Length header"))
       }
 
+      "two Host headers" in new Test {
+        """GET / HTTP/1.1
+          |Host: api.example.com
+          |Host: akka.io
+          |
+          |foo""" should parseToError(
+          BadRequest,
+          ErrorInfo("HTTP message must not contain more than one Host header"))
+      }
+
       "a too-long URI" in new Test {
         "GET /2345678901234567890123456789012345678901 HTTP/1.1" should parseToError(
-          RequestUriTooLong,
+          UriTooLong,
           ErrorInfo("URI length exceeds the configured limit of 40 characters"))
       }
 
       "HTTP version 1.2" in new Test {
         """GET / HTTP/1.2
           |""" should parseToError(
-          HTTPVersionNotSupported,
+          HttpVersionNotSupported,
           ErrorInfo("The server does not support the HTTP protocol version used in the request."))
       }
 
@@ -616,7 +628,7 @@ abstract class RequestParserSpec(mode: String, newLine: String) extends FreeSpec
     class StrictEqualHttpRequest(val req: HttpRequest) {
       override def equals(other: scala.Any): Boolean = other match {
         case other: StrictEqualHttpRequest =>
-          this.req.copy(entity = HttpEntity.Empty) == other.req.copy(entity = HttpEntity.Empty) &&
+          this.req.withEntity(HttpEntity.Empty) == other.req.withEntity(HttpEntity.Empty) &&
             this.req.entity.toStrict(awaitAtMost).awaitResult(awaitAtMost) ==
             other.req.entity.toStrict(awaitAtMost).awaitResult(awaitAtMost)
       }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl.marshallers.jackson;
@@ -62,7 +62,7 @@ public class Jackson {
     try {
       return mapper.readerFor(expectedType).readValue(json);
     } catch (IOException e) {
-      throw new IllegalArgumentException("Cannot unmarshal JSON as " + expectedType.getSimpleName(), e);
+      throw new IllegalArgumentException("Cannot unmarshal JSON as " + expectedType.getSimpleName() + ": " + e.getMessage(), e);
     }
   }
 }

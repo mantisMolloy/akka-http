@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.rendering
@@ -73,7 +73,8 @@ private[http] class HttpResponseRendererFactory(
         var closeMode: CloseMode = DontClose // signals what to do after the current response
         def close: Boolean = closeMode != DontClose
         def closeIf(cond: Boolean): Unit = if (cond) closeMode = CloseConnection
-        var transferring = false
+        var transferSink: Option[SubSinkInlet[ByteString]] = None
+        def transferring: Boolean = transferSink.isDefined
 
         setHandler(in, new InHandler {
           override def onPush(): Unit =
@@ -85,7 +86,6 @@ private[http] class HttpResponseRendererFactory(
                 try transfer(headerData, outStream)
                 catch {
                   case NonFatal(e) =>
-                    transferring = false
                     log.error(e, s"Rendering of response failed because response entity stream materialization failed with '${e.getMessage}'. Sending out 500 response instead.")
                     push(out, render(ResponseRenderingContext(HttpResponse(500, entity = StatusCodes.InternalServerError.defaultMessage))).asInstanceOf[Strict].bytes)
                 }
@@ -94,20 +94,26 @@ private[http] class HttpResponseRendererFactory(
           override def onUpstreamFinish(): Unit =
             if (transferring) closeMode = CloseConnection
             else completeStage()
+
+          override def onUpstreamFailure(ex: Throwable): Unit = {
+            stopTransfer()
+            failStage(ex)
+          }
         })
-        val waitForDemandHandler = new OutHandler {
+        private val waitForDemandHandler = new OutHandler {
           def onPull(): Unit = if (!hasBeenPulled(in)) tryPull(in)
         }
+        def stopTransfer(): Unit = {
+          setHandler(out, waitForDemandHandler)
+          if (isAvailable(out) && !hasBeenPulled(in)) tryPull(in)
+          transferSink.foreach(_.cancel())
+          transferSink = None
+        }
+
         setHandler(out, waitForDemandHandler)
         def transfer(headerData: ByteString, outStream: Source[ByteString, Any]): Unit = {
-          transferring = true
           val sinkIn = new SubSinkInlet[ByteString]("RenderingSink")
-          def stopTransfer(): Unit = {
-            transferring = false
-            setHandler(out, waitForDemandHandler)
-            if (isAvailable(out)) pull(in)
-            sinkIn.cancel()
-          }
+          transferSink = Some(sinkIn)
 
           sinkIn.setHandler(new InHandler {
             override def onPush(): Unit = push(out, ResponseRenderingOutput.HttpData(sinkIn.grab()))
@@ -127,7 +133,7 @@ private[http] class HttpResponseRendererFactory(
               else sinkIn.pull()
             override def onDownstreamFinish(): Unit = {
               completeStage()
-              sinkIn.cancel()
+              stopTransfer()
             }
           })
 
@@ -246,7 +252,7 @@ private[http] class HttpResponseRendererFactory(
           }
 
           def renderContentLengthHeader(contentLength: Long) =
-            if (status.allowsEntity) r ~~ `Content-Length` ~~ contentLength ~~ CrLf else r
+            if (status.allowsEntity) r ~~ ContentLengthBytes ~~ contentLength ~~ CrLf else r
 
           def headersAndEntity(entityBytes: => Source[ByteString, Any]): StrictOrStreamed =
             if (noEntity) {

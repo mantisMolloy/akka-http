@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.client
@@ -130,7 +130,7 @@ private[http] object PoolInterface {
     }
 
     override protected def onTimer(timerKey: Any): Unit = {
-      log.info(s"Pool shutting down because akka.http.host-connection-pool.idle-timeout triggered after $idleTimeout.")
+      log.debug(s"Pool shutting down because akka.http.host-connection-pool.idle-timeout triggered after $idleTimeout.")
       requestShutdown(ShutdownReason.IdleTimeout)
     }
 
@@ -195,7 +195,7 @@ private[http] object PoolInterface {
     def shutdownIfRequestedAndPossible(): Unit =
       if (shuttingDown) {
         if (remainingRequested == 0) {
-          log.info("Pool is now shutting down as requested.")
+          log.debug("Pool is now shutting down as requested.")
           shutdownPromise.trySuccess(shuttingDownReason.get)
           completeStage()
         } else

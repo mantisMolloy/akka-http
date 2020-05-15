@@ -36,7 +36,10 @@ inThisBuild(Def.settings(
   Formatting.formatSettings,
   shellPrompt := { s => Project.extract(s).currentProject.id + " > " },
   concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
-  useCoursier := false, // FIXME: remove once https://github.com/sbt/sbt/issues/4706 has been removed
+  onLoad in Global := {
+    sLog.value.info(s"Building Akka HTTP ${version.value} against Akka ${AkkaDependency.akkaVersion}")
+    (onLoad in Global).value
+  }
 ))
 
 lazy val root = Project(
@@ -58,11 +61,13 @@ lazy val root = Project(
       // We currently expect the java documentation at akka-http/target/javaunidoc, so
       // the following heuristic is hopefully good enough to determine which one is the Java and
       // which one the Scala version.
+
+      // This will fail with a MatchError when -Dakka.genjavadoc.enabled is not set
       val (Seq(java), Seq(scala)) = unidocArtifacts.partition(_.getName contains "java")
 
       Seq(
-        scala -> s"www/api/akka-http/${version.value}",
-        java -> s"www/japi/akka-http/${version.value}")
+        scala -> gustavDir("api").value,
+        java -> gustavDir("japi").value)
     }
   )
   .aggregate(
@@ -90,21 +95,6 @@ def add213CrossDirs(config: Configuration): Seq[Setting[_]] = Seq(
     CrossVersion.partialVersion(scalaVersion.value) match {
       case Some((2, n)) if n >= 13 => sourceDir / "scala-2.13+"
       case _                       => sourceDir / "scala-2.13-"
-    }
-  }
-)
-
-// TODO: remove once 2.11 is dropped, https://github.com/akka/akka-http/issues/2589
-/**
- * Adds a `src/.../scala-2.12+` source directory for Scala 2.12 and newer
- * and a `src/.../scala-2.12-` source directory for Scala version older than 2.12
- */
-def add212CrossDirs(config: Configuration): Seq[Setting[_]] = Seq(
-  unmanagedSourceDirectories in config += {
-    val sourceDir = (sourceDirectory in config).value
-    CrossVersion.partialVersion(scalaVersion.value) match {
-      case Some((2, n)) if n >= 12 => sourceDir / "scala-2.12+"
-      case _                       => sourceDir / "scala-2.12-"
     }
   }
 )
@@ -152,8 +142,7 @@ lazy val httpCore = project("akka-http-core")
   .addAkkaModuleDependency(
     "akka-stream-testkit",
     "test",
-    shouldUseSourceDependency = true,
-    uri("git://github.com/akka/akka.git#master"),
+    AkkaDependency.Sources("git://github.com/akka/akka.git#master"),
     onlyIf = System.getProperty("akka.http.test-against-akka-master", "false") == "true"
   )
   .settings(Dependencies.httpCore)
@@ -173,6 +162,13 @@ lazy val http = project("akka-http")
   .settings(scalaMacroSupport)
   .enablePlugins(BootstrapGenjavadoc, BoilerplatePlugin)
 
+def gustavDir(kind: String) = Def.task {
+  val ver =
+    if (isSnapshot.value) "snapshot"
+    else version.value
+  s"www/$kind/akka-http/$ver"
+}
+
 lazy val http2Support = project("akka-http2-support")
   .settings(commonSettings)
   .settings(AutomaticModuleName.settings("akka.http.http2"))
@@ -186,7 +182,6 @@ lazy val http2Support = project("akka-http2-support")
       (target in Test).value / h2specName / h2specExe
     }
     Seq(
-      javaAgents += Dependencies.Compile.Test.alpnAgent,
       fork in run in Test := true,
       fork in Test := true,
       sbt.Keys.connectInput in run in Test := true,
@@ -317,8 +312,10 @@ def httpMarshallersJavaSubproject(name: String) =
 lazy val docs = project("docs")
   .enablePlugins(AkkaParadoxPlugin, NoPublish, DeployRsync)
   .disablePlugins(BintrayPlugin, MimaPlugin)
-  .addAkkaModuleDependency("akka-stream", "provided")
-  .addAkkaModuleDependency("akka-actor-typed", "provided", includeIfScalaVersionMatches = _ != "2.11") // no akka-actor-typed in 2.11 any more
+  .addAkkaModuleDependency("akka-stream", "provided", AkkaDependency.docs)
+  .addAkkaModuleDependency("akka-actor-typed", "provided", AkkaDependency.docs)
+  .addAkkaModuleDependency("akka-multi-node-testkit", "provided", AkkaDependency.docs)
+  .addAkkaModuleDependency("akka-stream-testkit", "provided", AkkaDependency.docs)
   .dependsOn(
     httpCore, http, httpXml, http2Support, httpMarshallersJava, httpMarshallersScala, httpCaching,
     httpTests % "compile;test->test", httpTestkit % "compile;test->test"
@@ -327,12 +324,30 @@ lazy val docs = project("docs")
   .settings(
     name := "akka-http-docs",
     resolvers += Resolver.jcenterRepo,
+    scalacOptions ++= Seq(
+      // Make sure we don't accidentally keep documenting deprecated calls
+      "-Xfatal-warnings",
+      // In docs adding an unused variable can be helpful, for example
+      // to show its type
+      "-Xlint:-unused",
+      // We use this for `complete`
+      "-Xlint:-adapted-args",
+      // TODO avoid this deprecation
+      "-P:silencer:globalFilters=Adaptation of argument list;adaptation of an empty argument list",
+      // Does not appear to lead to problems
+      "-P:silencer:globalFilters=The outer reference in this type test cannot be checked at run time",
+      // Can be removed when we drop support for Scala 2.12
+      "-P:silencer:globalFilters=object JavaConverters in package collection is deprecated"
+    ),
+    scalacOptions --= Seq(
+      // Code after ??? can be considered 'dead',  but still useful for docs
+      "-Ywarn-dead-code",
+    ),
     paradoxGroups := Map("Language" -> Seq("Scala", "Java")),
     paradoxProperties in Compile ++= Map(
       "project.name" -> "Akka HTTP",
       "canonical.base_url" -> "https://doc.akka.io/docs/akka-http/current",
-      "akka.version" -> AkkaDependency.akkaVersion,
-      "alpn-agent.version" -> Dependencies.alpnAgentVersion,
+      "akka.version" -> AkkaDependency.docs.version,
       "scala.binary_version" -> scalaBinaryVersion.value, // to be consistent with Akka build
       "scala.binaryVersion" -> scalaBinaryVersion.value,
       "scaladoc.version" -> scalaVersion.value,
@@ -340,19 +355,19 @@ lazy val docs = project("docs")
         case akka.Doc.BinVer(_) => ""
         case _                  => "cross CrossVersion.full"
       }),
-      "jackson.version" -> Dependencies.jacksonXmlVersion,
-      "extref.akka-docs.base_url" -> s"https://doc.akka.io/docs/akka/${AkkaDependency.akkaVersion}/%s",
-      "extref.akka25-docs.base_url" -> s"https://doc.akka.io/docs/akka/2.5/%s",
+      "jackson.version" -> Dependencies.jacksonVersion,
+      "extref.akka-docs.base_url" -> s"https://doc.akka.io/docs/akka/${AkkaDependency.docs.link}/%s",
       "javadoc.akka.http.base_url" -> {
         val v = if (isSnapshot.value) "current" else version.value
         s"https://doc.akka.io/japi/akka-http/$v"
       },
-      "javadoc.akka.base_url" -> s"https://doc.akka.io/japi/akka/${AkkaDependency.akkaVersion}",
+      "javadoc.akka.base_url" -> s"https://doc.akka.io/japi/akka/${AkkaDependency.docs.link}",
+      "javadoc.akka.link_style" -> "direct",
       "scaladoc.akka.http.base_url" -> {
         val v = if (isSnapshot.value) "current" else version.value
         s"https://doc.akka.io/api/akka-http/$v"
       },
-      "scaladoc.akka.base_url" -> s"https://doc.akka.io/api/akka/${AkkaDependency.akkaVersion}",
+      "scaladoc.akka.base_url" -> s"https://doc.akka.io/api/akka/${AkkaDependency.docs.link}",
       "algolia.docsearch.api_key" -> "0ccbb8bf5148554a406fbf07df0a93b9",
       "algolia.docsearch.index_name" -> "akka-http",
       "google.analytics.account" -> "UA-21117439-1",
@@ -366,8 +381,7 @@ lazy val docs = project("docs")
     apidocRootPackage := "akka",
     Formatting.docFormatSettings,
     additionalTasks in ValidatePR += paradox in Compile,
-    deployRsyncArtifact := List((paradox in Compile).value -> s"www/docs/akka-http/${version.value}"),
-    add212CrossDirs(Test)
+    deployRsyncArtifact := List((paradox in Compile).value -> gustavDir("docs").value),
   )
   .settings(ParadoxSupport.paradoxWithCustomDirectives)
 
@@ -377,7 +391,7 @@ lazy val compatibilityTests = Project("akka-http-compatibility-tests", file("akk
   .addAkkaModuleDependency("akka-stream", "provided")
   .settings(
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-http" % "10.1.8" % "provided", // TODO, should we make that latest?
+      "com.typesafe.akka" %% "akka-http" % MiMa.latestVersion % "provided",
     ),
     (dependencyClasspath in Test) := {
       // HACK: We'd like to use `dependsOn(http % "test->compile")` to upgrade the explicit dependency above to the

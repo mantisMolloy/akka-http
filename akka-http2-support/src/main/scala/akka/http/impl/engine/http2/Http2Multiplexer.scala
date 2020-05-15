@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.http2
@@ -150,7 +150,6 @@ private[http2] trait Http2MultiplexerSupport { logic: GraphStageLogic with Stage
               trailer = Some(ParsedHeadersFrame(streamId, endStream = true, ResponseRendering.renderHeaders(headers, log), None))
           }
 
-          debug(s"[$streamId] buffered ${buffer.size} bytes")
           maybePull()
 
           // else wait for more data being drained

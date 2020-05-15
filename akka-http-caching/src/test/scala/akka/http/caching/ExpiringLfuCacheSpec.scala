@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.caching
@@ -10,12 +10,14 @@ import java.util.concurrent.CountDownLatch
 import akka.actor.ActorSystem
 import akka.http.caching.scaladsl.CachingSettings
 import akka.testkit.TestKit
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.duration._
 import scala.concurrent.{ Await, Future, Promise }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class ExpiringLfuCacheSpec extends WordSpec with Matchers with BeforeAndAfterAll {
+class ExpiringLfuCacheSpec extends AnyWordSpec with Matchers with BeforeAndAfterAll {
   implicit val system: ActorSystem = ActorSystem()
   import system.dispatcher
 
@@ -136,17 +138,17 @@ class ExpiringLfuCacheSpec extends WordSpec with Matchers with BeforeAndAfterAll
           val rand = new Random(track)
           (1 to 10000) foreach { i =>
             val ix = rand.nextInt(1000) // for a random index into the cache
-            val value = Await.result(cache.get(ix, () => { // get (and maybe set) the cache value
+            val value = cache.get(ix, () => { // get (and maybe set) the cache value
               Thread.sleep(0)
               rand.nextInt(1000000) + 1
-            }), 5.second)
+            }).value.get.get // should always be Future.successful
             if (array(ix) == 0) array(ix) = value // update our view of the cache
             else assert(array(ix) == value, "Cache view is inconsistent (track " + track + ", iteration " + i +
               ", index " + ix + ": expected " + array(ix) + " but is " + value)
           }
           array
         }
-      }, 5.second)
+      }, 10.second)
 
       views.transpose.foreach { ints: Seq[Int] =>
         ints.filter(_ != 0).reduceLeft((a, b) => if (a == b) a else 0) should not be 0

@@ -16,6 +16,7 @@ from a background with non-"streaming first" HTTP Servers.
 @@@ index
 
 * [overview](overview.md)
+* [play](play-comparison.md)
 * [routes](routes.md)
 * [directives/index](directives/index.md)
 * [rejections](rejections.md)
@@ -23,6 +24,7 @@ from a background with non-"streaming first" HTTP Servers.
 * [path-matchers](path-matchers.md)
 * [case-class-extraction](case-class-extraction.md)
 * [source-streaming-support](source-streaming-support.md)
+* [style](style-guide.md)
 * [testkit](testkit.md)
 * [http-app](HttpApp.md)
 
@@ -33,7 +35,7 @@ from a background with non-"streaming first" HTTP Servers.
 This is a complete, very basic Akka HTTP application relying on the Routing DSL:
 
 Scala
-:  @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #minimal-routing-example }
+:  @@snip [HttpServerRoutingMinimal.scala]($test$/scala/docs/http/scaladsl/HttpServerRoutingMinimal.scala)
 
 Java
 :  @@snip [HttpServerMinimalExampleTest.java]($test$/java/docs/http/javadsl/HttpServerMinimalExampleTest.java) { #minimal-routing-example }
@@ -69,42 +71,55 @@ the Routing DSL will look like:
 
 @@@
 
-## Interaction with Akka Typed
+## Compared with Play framework routes
 
-Since Akka version `2.5.22`, Akka typed became ready for production, Akka HTTP, however, is still using the
-untyped `ActorSystem`. This following example will demonstrate how to use Akka HTTP and Akka Typed together
-within the same application.
+If you have been using Play framework's routes file notation before this @ref[Play comparison](play-comparison.md) may help you to get started with Akka HTTP routing.
+
+<a name="interaction-with-akka-typed">
+## Interaction with Actors
+
+The following example shows how to use Akka HTTP with Akka Actors.
 
 We will create a small web server responsible to record build jobs with its state and duration, query jobs by
 id and status, and clear the job history.
 
-First let's start by defining the `Behavior` that will act as a repository for the build job information:
+First let's start by defining the @apidoc[Behavior] that will act as a repository for the build job information. This isn't
+strictly needed for our sample, but just to have an actual actor to interact with:
 
 Scala
-:  @@snip [HttpServerWithTypedSpec.scala]($test$/scala-2.12+/docs/http/scaladsl/HttpServerWithTypedSpec.scala) { #akka-typed-behavior }
+:  @@snip [HttpServerWithActorsSample.scala]($test$/scala/docs/http/scaladsl/HttpServerWithActorsSample.scala) { #akka-typed-behavior }
 
+Java
+:  @@snip [JobRepository.scala](/docs/src/test/java/docs/http/javadsl/JobRepository.java) { #behavior }
 
-Now, let's define the JSON marshaller and unmarshallers:
+@@@ div { .group-scala }
 
-Scala
-:  @@snip [HttpServerWithTypedSpec.scala]($test$/scala-2.12+/docs/http/scaladsl/HttpServerWithTypedSpec.scala) { #akka-typed-json }
-
-
-Next step is to define the @apidoc[Route$] that will communicate with the previously defined behavior
-and handle all its possible responses
+Then, let's define the JSON marshaller and unmarshallers for the HTTP routes:
 
 Scala
-:  @@snip [HttpServerWithTypedSpec.scala]($test$/scala-2.12+/docs/http/scaladsl/HttpServerWithTypedSpec.scala) { #akka-typed-route }
+:  @@snip [HttpServerWithActorsSample.scala]($test$/scala/docs/http/scaladsl/HttpServerWithActorsSample.scala) { #akka-typed-json }
 
+@@@
 
-And finally, we just need to bootstrap our web server and instantiate our `Behavior`:
+Next step is to define the
+@scala[@scaladoc[Route](akka.http.scaladsl.server.index#Route=akka.http.scaladsl.server.RequestContext=%3Escala.concurrent.Future[akka.http.scaladsl.server.RouteResult])]
+@java[@javadoc[Route](akka.http.javadsl.server.Route)]
+that will communicate with the previously defined behavior
+and handle all its possible responses:
 
 Scala
-:  @@snip [HttpServerWithTypedSpec.scala]($test$/scala-2.12+/docs/http/scaladsl/HttpServerWithTypedSpec.scala) { #akka-typed-bootstrap }
+:  @@snip [HttpServerWithActorsSample.scala]($test$/scala/docs/http/scaladsl/HttpServerWithActorsSample.scala) { #akka-typed-route }
 
+Java
+:  @@snip [JobRoutes.scala](/docs/src/test/java/docs/http/javadsl/JobRoutes.java) { #route }
 
-Note that the `akka.actor.typed.ActorSystem` is converted with `toClassic`, which comes from
-`import akka.actor.typed.scaladsl.adapter._`. If you are using Akka 2.5.x this conversion method is named `toUntyped`.
+Finally, we create a @apidoc[Behavior] that bootstraps the web server and use it as the root behavior of our actor system:
+
+Scala
+:  @@snip [HttpServerWithActorsSample.scala]($test$/scala/docs/http/scaladsl/HttpServerWithActorsSample.scala) { #akka-typed-bootstrap }
+
+Java
+:  @@snip [HttpServerWithActorsSample.java](/docs/src/test/java/docs/http/javadsl/HttpServerWithActorsSample.java) { #bootstrap }
 
 ## Dynamic Routing Example
 
@@ -152,7 +167,7 @@ is already taken by another application, or if the port is privileged (i.e. only
 In this case the "binding future" will fail immediately, and we can react to it by listening on the @scala[`Future`]@java[`CompletionStage`]'s completion:
 
 Scala
-:  @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #binding-failure-high-level-example }
+:  @@snip [HttpServerBindingFailure.scala]($test$/scala/docs/http/scaladsl/HttpServerBindingFailure.scala)
 
 Java
 :  @@snip [HighLevelServerBindFailureExample.java]($test$/java/docs/http/javadsl/server/HighLevelServerBindFailureExample.java) { #binding-failure-high-level-example }

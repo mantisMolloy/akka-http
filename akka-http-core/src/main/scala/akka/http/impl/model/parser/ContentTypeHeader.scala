@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.model.parser
@@ -33,7 +33,7 @@ private[parser] trait ContentTypeHeader { this: Parser with CommonRules with Com
           case x: MediaType.WithOpenCharset if charset.isEmpty   => ContentType.WithMissingCharset(x)
         }
 
-      case Seq(("charset", value), tail @ _*) =>
+      case Seq((key, value), tail @ _*) if equalsAsciiCaseInsensitive(key, "charset") =>
         contentType(main, sub, tail, Some(getCharset(value)), builder)
 
       case Seq(kvp, tail @ _*) =>

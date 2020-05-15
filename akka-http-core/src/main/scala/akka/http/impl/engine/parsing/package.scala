@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine
@@ -26,7 +26,7 @@ package object parsing {
     case x                              => x.toString
   }
 
-  private[http] def byteChar(input: ByteString, ix: Int): Char = byteAt(input, ix).toChar
+  private[http] def byteChar(input: ByteString, ix: Int): Char = (byteAt(input, ix) & 0xff).toChar
 
   private[http] def byteAt(input: ByteString, ix: Int): Byte =
     if (ix < input.length) input(ix) else throw NotEnoughDataException

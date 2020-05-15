@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.model
@@ -20,7 +20,6 @@ import akka.stream.scaladsl._
 import akka.stream.stage._
 import akka.stream._
 import akka.{ Done, NotUsed, stream }
-import akka.http.scaladsl.model.ContentType.{ Binary, NonBinary, WithMissingCharset }
 import akka.http.scaladsl.util.FastFuture
 import akka.http.javadsl.{ model => jm }
 import akka.http.impl.util.{ JavaMapping, StreamUtils }
@@ -356,26 +355,9 @@ object HttpEntity {
     override def productPrefix = "HttpEntity.Strict"
 
     override def toString = {
-      val dataAsString = contentType match {
-        case _: Binary =>
-          data.toString()
-        case _: WithMissingCharset =>
-          data.toString()
-        case nb: NonBinary =>
-          try {
-            val maxBytes = 4096
-            if (data.length > maxBytes) {
-              val truncatedString = data.take(maxBytes).decodeString(nb.charset.value).dropRight(1)
-              s"$truncatedString ... (${data.length} bytes total)"
-            } else
-              data.decodeString(nb.charset.value)
-          } catch {
-            case NonFatal(e) =>
-              data.toString()
-          }
-      }
+      val dataSizeStr = s"${data.length} bytes total"
 
-      s"$productPrefix($contentType,$dataAsString)"
+      s"$productPrefix($contentType,$dataSizeStr)"
     }
 
     /** Java API */

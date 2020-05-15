@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.parsing
 
 import scala.annotation.tailrec
 import scala.concurrent.Promise
-import scala.util.control.NoStackTrace
+import scala.util.control.{ NoStackTrace, NonFatal }
 import akka.http.scaladsl.settings.ParserSettings
 import akka.http.impl.model.parser.CharacterClasses
 import akka.util.ByteString
@@ -28,6 +28,8 @@ private[http] class HttpResponseParser(protected val settings: ParserSettings, p
 
   private[this] var contextForCurrentResponse: Option[ResponseContext] = None
   private[this] var statusCode: StatusCode = StatusCodes.OK
+
+  final override val isResponseParser = true
 
   final def createShallowCopy(): HttpResponseParser = new HttpResponseParser(settings, headerParser.createShallowCopy())
 
@@ -79,7 +81,7 @@ private[http] class HttpResponseParser(protected val settings: ParserSettings, p
               val reason = asciiString(input, reasonStartIdx, reasonEndIdx)
               StatusCodes.custom(code, reason)
             } catch {
-              case _: Exception => badStatusCodeSpecific(code)
+              case NonFatal(_) => badStatusCodeSpecific(code)
             }
           }
         }

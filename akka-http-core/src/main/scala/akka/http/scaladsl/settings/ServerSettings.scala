@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.settings
@@ -7,14 +7,15 @@ package akka.http.scaladsl.settings
 import java.util.Random
 import java.util.function.Supplier
 
-import akka.annotation.DoNotInherit
+import akka.actor.ActorSystem
+import akka.annotation.{ DoNotInherit, InternalApi }
+import akka.http.ParsingErrorHandler
 import akka.http.impl.settings.ServerSettingsImpl
 import akka.http.impl.util._
 import akka.http.impl.util.JavaMapping.Implicits._
 import akka.http.javadsl.{ settings => js }
 import akka.http.scaladsl.model.HttpResponse
-import akka.http.scaladsl.model.headers.Host
-import akka.http.scaladsl.model.headers.Server
+import akka.http.scaladsl.model.headers.{ Host, Server }
 import akka.io.Inet.SocketOption
 import com.typesafe.config.Config
 
@@ -35,6 +36,7 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   def maxConnections: Int
   def pipeliningLimit: Int
   def remoteAddressHeader: Boolean
+  def remoteAddressAttribute: Boolean
   def rawRequestUriHeader: Boolean
   def transparentHeadRequests: Boolean
   def verboseErrorMessages: Boolean
@@ -51,6 +53,8 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   def defaultHttpPort: Int
   def defaultHttpsPort: Int
   def terminationDeadlineExceededResponse: HttpResponse
+  def parsingErrorHandler: String
+  def streamCancellationDelay: FiniteDuration
 
   /* Java APIs */
 
@@ -68,6 +72,7 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   override def getTimeouts = timeouts
   override def getRawRequestUriHeader = rawRequestUriHeader
   override def getRemoteAddressHeader = remoteAddressHeader
+  override def getRemoteAddressAttribute: Boolean = remoteAddressAttribute
   override def getLogUnencryptedNetworkBytes = OptionConverters.toJava(logUnencryptedNetworkBytes)
   override def getWebsocketRandomFactory = new Supplier[Random] {
     override def get(): Random = websocketRandomFactory()
@@ -76,6 +81,8 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   override def getDefaultHttpsPort: Int = defaultHttpsPort
   override def getTerminationDeadlineExceededResponse: akka.http.javadsl.model.HttpResponse =
     terminationDeadlineExceededResponse
+  override def getParsingErrorHandler: String = parsingErrorHandler
+  override def getStreamCancellationDelay: FiniteDuration = streamCancellationDelay
   // ---
 
   // override for more specific return type
@@ -83,6 +90,7 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   override def withMaxConnections(newValue: Int): ServerSettings = self.copy(maxConnections = newValue)
   override def withPipeliningLimit(newValue: Int): ServerSettings = self.copy(pipeliningLimit = newValue)
   override def withRemoteAddressHeader(newValue: Boolean): ServerSettings = self.copy(remoteAddressHeader = newValue)
+  override def withRemoteAddressAttribute(newValue: Boolean): ServerSettings = self.copy(remoteAddressAttribute = newValue)
   override def withRawRequestUriHeader(newValue: Boolean): ServerSettings = self.copy(rawRequestUriHeader = newValue)
   override def withTransparentHeadRequests(newValue: Boolean): ServerSettings = self.copy(transparentHeadRequests = newValue)
   override def withVerboseErrorMessages(newValue: Boolean): ServerSettings = self.copy(verboseErrorMessages = newValue)
@@ -97,6 +105,8 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   override def withDefaultHttpsPort(newValue: Int): ServerSettings = self.copy(defaultHttpsPort = newValue)
   override def withTerminationDeadlineExceededResponse(response: akka.http.javadsl.model.HttpResponse): ServerSettings =
     self.copy(terminationDeadlineExceededResponse = response.asScala)
+  override def withParsingErrorHandler(newValue: String) = self.copy(parsingErrorHandler = newValue)
+  override def withStreamCancellationDelay(newValue: FiniteDuration): ServerSettings = self.copy(streamCancellationDelay = newValue)
 
   // overloads for Scala idiomatic use
   def withTimeouts(newValue: ServerSettings.Timeouts): ServerSettings = self.copy(timeouts = newValue)
@@ -117,6 +127,14 @@ abstract class ServerSettings private[akka] () extends akka.http.javadsl.setting
   def mapPreviewServerSettings(f: PreviewServerSettings => PreviewServerSettings): ServerSettings = withPreviewServerSettings(f(previewServerSettings))
   def mapWebsocketSettings(f: WebSocketSettings => WebSocketSettings): ServerSettings = withWebsocketSettings(f(websocketSettings))
   def mapTimeouts(f: ServerSettings.Timeouts => ServerSettings.Timeouts): ServerSettings = withTimeouts(f(timeouts))
+
+  /**
+   * INTERNAL API
+   *
+   * Returns an instance of the ParsingErrorHandler as specified by `parsingErrorHandler`
+   */
+  @InternalApi
+  private[http] def parsingErrorHandlerInstance(system: ActorSystem): ParsingErrorHandler
 }
 
 object ServerSettings extends SettingsCompanion[ServerSettings] {

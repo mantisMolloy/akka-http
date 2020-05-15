@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.http2.hpack
@@ -42,12 +42,12 @@ private[http2] object HeaderCompression extends GraphStage[FlowShape[FrameEvent,
           push(eventsOut, ack)
 
         case ParsedHeadersFrame(streamId, endStream, kvs, prioInfo) =>
-          os.reset()
           kvs.foreach {
             case (key, value) =>
               encoder.encodeHeader(os, key.getBytes(HeaderDecompression.UTF8), value.getBytes(HeaderDecompression.UTF8), false)
           }
           val result = ByteString(os.toByteArray)
+          os.reset()
           if (result.size <= currentMaxFrameSize) push(eventsOut, HeadersFrame(streamId, endStream, endHeaders = true, result, prioInfo))
           else {
             val first = HeadersFrame(streamId, endStream, endHeaders = false, result.take(currentMaxFrameSize), prioInfo)

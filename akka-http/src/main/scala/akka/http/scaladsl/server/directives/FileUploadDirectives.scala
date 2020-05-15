@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server.directives
@@ -29,18 +29,6 @@ trait FileUploadDirectives {
   import BasicDirectives._
   import FutureDirectives._
   import MarshallingDirectives._
-
-  /**
-   * Streams the bytes of the file submitted using multipart with the given file name into a temporary file on disk.
-   * If there is an error writing to disk the request will be failed with the thrown exception, if there is no such
-   * field the request will be rejected, if there are multiple file parts with the same name, the first one will be
-   * used and the subsequent ones ignored.
-   *
-   * @group fileupload
-   */
-  @deprecated("Deprecated in favor of storeUploadedFile which allows to specify a file to store the upload in.", "10.0.11")
-  def uploadedFile(fieldName: String): Directive1[(FileInfo, File)] =
-    storeUploadedFile(fieldName, _ => File.createTempFile("akka-http-upload", ".tmp")).tmap(Tuple1(_))
 
   /**
    * Streams the bytes of the file submitted using multipart with the given file name into a designated file on disk.

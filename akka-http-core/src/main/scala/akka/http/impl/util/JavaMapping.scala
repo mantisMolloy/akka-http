@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.util
@@ -180,6 +180,9 @@ private[http] object JavaMapping {
   class Inherited[J <: AnyRef, S <: J](implicit classTag: ClassTag[S]) extends JavaMapping[J, S] {
     def toJava(scalaObject: S): J = scalaObject
     def toScala(javaObject: J): S = cast[S](javaObject)
+
+    import scala.language.higherKinds
+    def downcast[F[+_]](f: F[J]): F[S] = f.asInstanceOf[F[S]]
   }
 
   implicit object ConnectionContext extends Inherited[ConnectionContext, akka.http.scaladsl.ConnectionContext]
@@ -212,6 +215,9 @@ private[http] object JavaMapping {
   implicit object InetSocketAddress extends Identity[java.net.InetSocketAddress]
   implicit object ByteString extends Identity[akka.util.ByteString]
 
+  implicit val AttributeKey = new Inherited[jm.AttributeKey[_], sm.AttributeKey[_]]
+  implicit def attributeKey[T]: Inherited[jm.AttributeKey[T], sm.AttributeKey[T]] =
+    AttributeKey.asInstanceOf[Inherited[jm.AttributeKey[T], sm.AttributeKey[T]]]
   implicit object ContentType extends Inherited[jm.ContentType, sm.ContentType]
   implicit object ContentTypeBinary extends Inherited[jm.ContentType.Binary, sm.ContentType.Binary]
   implicit object ContentTypeNonBinary extends Inherited[jm.ContentType.NonBinary, sm.ContentType.NonBinary]

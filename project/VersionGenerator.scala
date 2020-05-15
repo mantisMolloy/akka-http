@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka
@@ -38,7 +38,7 @@ object VersionGenerator {
 
   def generateVersion(dir: SettingKey[File], locate: File => File, template: String) = Def.task[Seq[File]] {
     val file = locate(dir.value)
-    val content = template.stripMargin.format(version.value, AkkaDependency.akkaVersion)
+    val content = template.stripMargin.format(version.value, AkkaDependency.minimumExpectedAkkaVersion)
     if (!file.exists || IO.read(file) != content) IO.write(file, content)
     Seq(file)
   }

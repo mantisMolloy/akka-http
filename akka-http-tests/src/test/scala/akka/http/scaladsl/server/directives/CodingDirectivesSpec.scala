@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -25,10 +25,6 @@ import akka.http.scaladsl.testkit.RouteTestTimeout
 import scala.concurrent.duration._
 
 class CodingDirectivesSpec extends RoutingSpec with Inside {
-
-  override def testConfigSource = """
-    akka.loggers = ["akka.testkit.TestEventListener"]
-  """
 
   implicit val routeTestTimeout = RouteTestTimeout(3.seconds.dilated)
 

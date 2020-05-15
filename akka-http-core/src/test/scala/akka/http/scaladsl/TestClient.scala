@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl
@@ -81,8 +81,6 @@ object TestClient extends App {
     akka.log-dead-letters = off
     akka.io.tcp.trace-logging = off""")
     implicit val system = ActorSystem("ServerTest", testConf)
-    implicit val fm = ActorMaterializer()
-    import system.dispatcher
 
     try {
       val done = Future.traverse(urls.zipWithIndex) {

@@ -244,7 +244,7 @@ Instead of extracting the composed directives to its own method, we can also use
 
 What you can't see from this snippet is that directives are not implemented as simple methods but rather as stand-alone
 objects of type `Directive`. This gives you more flexibility when composing directives. For example you can
-also use the `|` operator on directives. Here is yet another way to write the example:
+also use the `|` operator (or the `or` method) on directives. Here is yet another way to write the example:
 
 @@@
 
@@ -267,7 +267,7 @@ out like this:
 
 Note that, because `getOrPut` doesn't take any parameters, it can be a `val` here.
 
-As an alternative to nesting you can also use the `&` operator:
+As an alternative to nesting you can also use the `&` operator (or the `and` method):
 
 @@snip [DirectiveExamplesSpec.scala]($test$/scala/docs/http/scaladsl/server/DirectiveExamplesSpec.scala) { #example-6 }
 
@@ -360,7 +360,7 @@ Also the number of extractions and their types have to match up:
 Scala
 :  ```scala
 val route = path("order" / IntNumber) | path("order" / DoubleNumber)   // doesn't compile
-val route = path("order" / IntNumber) | parameter('order.as[Int])      // ok
+val route = path("order" / IntNumber) | parameter("order".as[Int])     // ok
 ```
 
 Java
@@ -383,7 +383,7 @@ When you combine directives producing extractions with the @scala[`&` operator]@
 
 Scala
 :  ```scala
-val order = path("order" / IntNumber) & parameters('oem, 'expired ?)
+val order = path("order" / IntNumber) & parameters("oem", "expired".optional)
 val route =
   order { (orderId, oem, expired) =>
     ...

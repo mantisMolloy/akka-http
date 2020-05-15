@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.client.pool
@@ -311,7 +311,7 @@ private[pool] object SlotState {
 
     override def onTimeout(ctx: SlotContext): SlotState = {
       val msg =
-        s"Response entity was not subscribed after $stateTimeout. Make sure to read the response entity body or call `discardBytes()` on it. " +
+        s"Response entity was not subscribed after $stateTimeout. Make sure to read the response `entity` body or call `entity.discardBytes()` on it -- in case you deal with `HttpResponse`, use the shortcut `response.discardEntityBytes()`. " +
           s"${ongoingRequest.request.debugString} -> ${ongoingResponse.debugString}"
       ctx.warning(msg) // FIXME: should still warn here?
       Failed(new TimeoutException(msg))
@@ -340,12 +340,12 @@ private[pool] object SlotState {
     final override def isIdle = false
 
     override def onRequestEntityCompleted(ctx: SlotContext): SlotState =
-      if (ctx.isConnectionClosed) Unconnected
+      if (ctx.isConnectionClosed) ToBeClosed
       else Idle
     override def onRequestEntityFailed(ctx: SlotContext, cause: Throwable): SlotState =
-      if (ctx.isConnectionClosed) Unconnected
+      if (ctx.isConnectionClosed) ToBeClosed // ignore error here
       else Idle
-    override def onConnectionCompleted(ctx: SlotContext): SlotState = Unconnected
-    override def onConnectionFailed(ctx: SlotContext, cause: Throwable): SlotState = Unconnected
+    override def onConnectionCompleted(ctx: SlotContext): SlotState = ToBeClosed
+    override def onConnectionFailed(ctx: SlotContext, cause: Throwable): SlotState = Failed(cause)
   }
 }

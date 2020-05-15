@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.ws
@@ -67,7 +67,13 @@ private[http] object ByteStringSinkProbe {
           inBuffer = inBuffer.drop(length)
           res
         } else {
-          inBuffer ++= probe.requestNext()
+          try inBuffer ++= probe.requestNext()
+          catch {
+            case ex if ex.getMessage.contains("Expected OnNext") =>
+              throw new AssertionError(
+                s"Expected [$length] bytes but only got [${inBuffer.size}] bytes\n${PrettyByteString.asPretty(inBuffer).prettyPrint(1024)}"
+              )
+          }
           expectBytes(length)
         }
 

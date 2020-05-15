@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.http2
@@ -13,9 +13,9 @@ import akka.http.impl.engine.ws.ByteStringSinkProbe
 import akka.stream.impl.io.ByteStringParser.ByteReader
 import akka.stream.scaladsl.Sink
 import akka.util.ByteString
-import org.scalatest.Matchers
 
 import scala.annotation.tailrec
+import org.scalatest.matchers.should.Matchers
 
 trait Http2FrameProbe {
   def sink: Sink[ByteString, Any]
@@ -178,7 +178,7 @@ object Http2FrameProbe extends Matchers {
 
         val reader = new ByteReader(headerBytes)
         val length = reader.readShortBE() << 8 | reader.readByte()
-        val tpe = Http2Protocol.FrameType.byId(reader.readByte())
+        val tpe = Http2Protocol.FrameType.byId(reader.readByte()).get
         val flags = new ByteFlag(reader.readByte())
         val streamId = reader.readIntBE()
 

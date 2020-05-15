@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -20,11 +20,13 @@ import akka.util.ByteString
 import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{ Millis, Seconds, Span }
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
+import org.scalatest.BeforeAndAfterAll
 
 import scala.collection.immutable
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class SizeLimitSpec extends WordSpec with Matchers with RequestBuilding with BeforeAndAfterAll with ScalaFutures {
+class SizeLimitSpec extends AnyWordSpec with Matchers with RequestBuilding with BeforeAndAfterAll with ScalaFutures {
 
   val maxContentLength = 800
   // Protect network more than memory:
@@ -62,7 +64,7 @@ class SizeLimitSpec extends WordSpec with Matchers with RequestBuilding with Bef
 
     "not accept entities bigger than configured with akka.http.parsing.max-content-length" in {
       Http().singleRequest(Post(s"http:/${binding.localAddress}/noDirective", entityOfSize(maxContentLength + 1)))
-        .futureValue.status shouldEqual StatusCodes.RequestEntityTooLarge
+        .futureValue.status shouldEqual StatusCodes.PayloadTooLarge
     }
   }
 
@@ -98,7 +100,7 @@ class SizeLimitSpec extends WordSpec with Matchers with RequestBuilding with Bef
       data.size should be > decodeMaxSize
 
       Http().singleRequest(request)
-        .futureValue.status shouldEqual StatusCodes.RequestEntityTooLarge
+        .futureValue.status shouldEqual StatusCodes.PayloadTooLarge
     }
   }
 
@@ -120,7 +122,7 @@ class SizeLimitSpec extends WordSpec with Matchers with RequestBuilding with Bef
     "reject a small request that decodes into a large chunked entity" in {
       val request = Post(s"http:/${binding.localAddress}/noDirective", "x").withHeaders(`Content-Encoding`(HttpEncoding("custom")))
       val response = Http().singleRequest(request).futureValue
-      response.status shouldEqual StatusCodes.RequestEntityTooLarge
+      response.status shouldEqual StatusCodes.PayloadTooLarge
     }
   }
 
@@ -142,7 +144,7 @@ class SizeLimitSpec extends WordSpec with Matchers with RequestBuilding with Bef
     "reject a small request that decodes into a large non-chunked streaming entity" in {
       val request = Post(s"http:/${binding.localAddress}/noDirective", "x").withHeaders(`Content-Encoding`(HttpEncoding("custom")))
       val response = Http().singleRequest(request).futureValue
-      response.status shouldEqual StatusCodes.RequestEntityTooLarge
+      response.status shouldEqual StatusCodes.PayloadTooLarge
     }
   }
 

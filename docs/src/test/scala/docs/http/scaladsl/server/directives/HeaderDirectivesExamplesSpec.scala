@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl.server.directives
@@ -184,7 +184,7 @@ class HeaderDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec with
   "headerValueByType-0" in {
     //#headerValueByType-0
     val route =
-      headerValueByType[Origin]() { origin =>
+      headerValueByType[Origin](()) { origin =>
         complete(s"The first origin was ${origin.origins.head}")
       }
 
@@ -205,7 +205,7 @@ class HeaderDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec with
   "optionalHeaderValueByType-0" in {
     //#optionalHeaderValueByType-0
     val route =
-      optionalHeaderValueByType[Origin]() {
+      optionalHeaderValueByType[Origin](()) {
         case Some(origin) => complete(s"The first origin was ${origin.origins.head}")
         case None         => complete("No Origin header found.")
       }

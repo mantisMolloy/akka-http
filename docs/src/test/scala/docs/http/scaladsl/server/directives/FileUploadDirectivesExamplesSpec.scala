@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl.server.directives
@@ -20,36 +20,12 @@ import scala.concurrent.duration._
 
 class FileUploadDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
 
-  override def testConfigSource = "akka.actor.default-mailbox.mailbox-type = \"akka.dispatch.UnboundedMailbox\""
+  override def testConfigSource = super.testConfigSource ++ """
+    akka.actor.default-mailbox.mailbox-type = "akka.dispatch.UnboundedMailbox"
+  """
 
   // test touches disk, so give it some time
-  implicit val routeTimeout = RouteTestTimeout(3.seconds.dilated)
-
-  "uploadedFile" in {
-    //#uploadedFile
-
-    val route =
-      uploadedFile("csv") {
-        case (metadata, file) =>
-          // do something with the file and file metadata ...
-          file.delete()
-          complete(StatusCodes.OK)
-      }
-
-    // tests:
-    val multipartForm =
-      Multipart.FormData(
-        Multipart.FormData.BodyPart.Strict(
-          "csv",
-          HttpEntity(ContentTypes.`text/plain(UTF-8)`, "2,3,5\n7,11,13,17,23\n29,31,37\n"),
-          Map("filename" -> "primes.csv")))
-
-    Post("/", multipartForm) ~> route ~> check {
-      status shouldEqual StatusCodes.OK
-    }
-
-    //#uploadedFile
-  }
+  implicit val routeTimeout = RouteTestTimeout(7.seconds.dilated)
 
   "storeUploadedFile" in {
     //#storeUploadedFile

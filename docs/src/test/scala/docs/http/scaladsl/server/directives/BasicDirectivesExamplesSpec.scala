@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl.server.directives
@@ -11,7 +11,7 @@ import akka.http.scaladsl.model.headers.{ RawHeader, Server }
 import akka.http.scaladsl.server.RouteResult.{ Complete, Rejected }
 import akka.http.scaladsl.server._
 import akka.http.scaladsl.settings.RoutingSettings
-import akka.stream.ActorMaterializer
+import akka.stream.{ Materializer, SystemMaterializer }
 import akka.stream.scaladsl.{ Sink, Source }
 import akka.util.ByteString
 import docs.CompileOnlySpec
@@ -50,7 +50,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
   }
   "withMaterializer-0" in {
     //#withMaterializer-0
-    val special = ActorMaterializer(namePrefix = Some("special"))
+    val special = Materializer(system).withNamePrefix("special")
 
     def sample() =
       path("sample") {
@@ -72,7 +72,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
 
     // tests:
     Get("/sample") ~> route ~> check {
-      responseAs[String] shouldEqual s"Materialized by ${materializer.##}!"
+      responseAs[String] shouldEqual s"Materialized by ${SystemMaterializer(system).materializer.##}!"
     }
     Get("/special/sample") ~> route ~> check {
       responseAs[String] shouldEqual s"Materialized by ${special.##}!"
@@ -86,7 +86,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
         extractMaterializer { materializer =>
           complete {
             // explicitly use the `materializer`:
-            Source.single(s"Materialized by ${materializer.##}!")
+            Source.single(s"Materialized by ${SystemMaterializer(system).materializer.##}!")
               .runWith(Sink.head)(materializer)
           }
         }
@@ -94,7 +94,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
 
     // tests:
     Get("/sample") ~> route ~> check {
-      responseAs[String] shouldEqual s"Materialized by ${materializer.##}!"
+      responseAs[String] shouldEqual s"Materialized by ${SystemMaterializer(system).materializer.##}!"
     }
     //#extractMaterializer-0
   }
@@ -242,7 +242,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
   "0mapResponse" in {
     //#mapResponse0
     def overwriteResultStatus(response: HttpResponse): HttpResponse =
-      response.copy(status = StatusCodes.BadGateway)
+      response.withStatus(StatusCodes.BadGateway)
     val route = mapResponse(overwriteResultStatus)(complete("abc"))
 
     // tests:
@@ -265,7 +265,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
           case code if code.isSuccess => response
           case code =>
             log.warning("Dropping response entity since response status code was: {}", code)
-            response.copy(entity = NullJsonEntity)
+            response.withEntity(NullJsonEntity)
         }
 
       /** Wrapper for all of our JSON API routes */
@@ -301,7 +301,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
     val makeEverythingOk = mapRouteResult {
       case Complete(response) =>
         // "Everything is OK!"
-        Complete(response.copy(status = 200))
+        Complete(response.withStatus(200))
       case r => r
     }
 
@@ -498,7 +498,7 @@ class BasicDirectivesExamplesSpec extends RoutingSpec with CompileOnlySpec {
   }
   "0mapRequest" in {
     //#mapRequest0
-    def transformToPostRequest(req: HttpRequest): HttpRequest = req.copy(method = HttpMethods.POST)
+    def transformToPostRequest(req: HttpRequest): HttpRequest = req.withMethod(HttpMethods.POST)
     val route =
       mapRequest(transformToPostRequest) {
         extractRequest { req =>

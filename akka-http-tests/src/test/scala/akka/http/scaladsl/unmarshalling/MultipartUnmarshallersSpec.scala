@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.unmarshalling
 
 import scala.concurrent.duration._
-import scala.concurrent.{ Await, Future }
+import scala.concurrent.{ Await, ExecutionContext, Future }
 import org.scalatest.matchers.Matcher
-import org.scalatest.{ BeforeAndAfterAll, FreeSpec, Matchers }
+import org.scalatest.BeforeAndAfterAll
 import akka.http.scaladsl.testkit.ScalatestUtils
 import akka.util.ByteString
 import akka.actor.ActorSystem
@@ -20,11 +20,13 @@ import akka.http.scaladsl.model.headers._
 import MediaTypes._
 import akka.testkit._
 import com.typesafe.config.ConfigFactory
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-trait MultipartUnmarshallersSpec extends FreeSpec with Matchers with BeforeAndAfterAll with ScalatestUtils {
+trait MultipartUnmarshallersSpec extends AnyFreeSpec with Matchers with BeforeAndAfterAll with ScalatestUtils {
   implicit val system = ActorSystem(getClass.getSimpleName)
   implicit val materializer = ActorMaterializer()
-  import system.dispatcher
+  implicit val ec: ExecutionContext = system.dispatcher
 
   def lineFeed: String
 
@@ -141,6 +143,24 @@ trait MultipartUnmarshallersSpec extends FreeSpec with Matchers with BeforeAndAf
           Multipart.General.BodyPart.Strict(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "first part, implicitly typed")),
           Multipart.General.BodyPart.Strict(HttpEntity(`application/octet-stream`, ByteString("second part, explicitly typed"))))
       }
+      "a full example (Strict) containing a CR in the body part" in {
+        Unmarshal(HttpEntity(
+          `multipart/mixed` withBoundary "12345",
+          ByteString("""preamble and
+                       |more preamble
+                       |--12345
+                       |
+                       |first part, impliINSERT_CR_HEREcitly typed
+                       |--12345
+                       |Content-Type: application/octet-stream
+                       |
+                       |second part, explicitly typed
+                       |--12345--
+                       |epilogue and
+                       |more epilogue""".stripMarginWithNewline(lineFeed).replaceAll("INSERT_CR_HERE", "\r")))).to[Multipart.General] should haveParts(
+          Multipart.General.BodyPart.Strict(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "first part, impli\rcitly typed")),
+          Multipart.General.BodyPart.Strict(HttpEntity(`application/octet-stream`, ByteString("second part, explicitly typed"))))
+      }
       "a full example (Default)" in {
         val content = """preamble and
                         |more preamble
@@ -158,6 +178,25 @@ trait MultipartUnmarshallersSpec extends FreeSpec with Matchers with BeforeAndAf
         Unmarshal(HttpEntity.Default(`multipart/mixed` withBoundary "12345", content.length, Source(byteStrings)))
           .to[Multipart.General] should haveParts(
             Multipart.General.BodyPart.Strict(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "first part, implicitly typed")),
+            Multipart.General.BodyPart.Strict(HttpEntity(`application/octet-stream`, ByteString("second part, explicitly typed"))))
+      }
+      "a full example (Default) containing a CR in the body part" in {
+        val content = """preamble and
+                        |more preamble
+                        |--12345
+                        |
+                        |first paINSERT_CR_HERErt, implicitly typed
+                        |--12345
+                        |Content-Type: application/octet-stream
+                        |
+                        |second part, explicitly typed
+                        |--12345--
+                        |epilogue and
+                        |more epilogue""".stripMarginWithNewline(lineFeed).replaceAll("INSERT_CR_HERE", "\r")
+        val byteStrings = content.map(c => ByteString(c.toString)) // one-char ByteStrings
+        Unmarshal(HttpEntity.Default(`multipart/mixed` withBoundary "12345", content.length, Source(byteStrings)))
+          .to[Multipart.General] should haveParts(
+            Multipart.General.BodyPart.Strict(HttpEntity(ContentTypes.`text/plain(UTF-8)`, "first pa\rrt, implicitly typed")),
             Multipart.General.BodyPart.Strict(HttpEntity(`application/octet-stream`, ByteString("second part, explicitly typed"))))
       }
       "a boundary with spaces" in {

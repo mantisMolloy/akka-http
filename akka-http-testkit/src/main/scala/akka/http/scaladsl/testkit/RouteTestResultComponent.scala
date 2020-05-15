@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.testkit
@@ -36,7 +36,7 @@ trait RouteTestResultComponent {
       }
     }
 
-    def response: HttpResponse = rawResponse.copy(entity = entity)
+    def response: HttpResponse = rawResponse.withEntity(entity)
 
     /** Returns a "fresh" entity with a "fresh" unconsumed byte- or chunk stream (if not strict) */
     def entity: ResponseEntity = entityRecreator()
@@ -66,6 +66,14 @@ trait RouteTestResultComponent {
             case RouteResult.Complete(response)   => Some(Right(response))
             case RouteResult.Rejected(rejections) => Some(Left(RejectionHandler.applyTransformations(rejections)))
           }
+          latch.countDown()
+        } else failTest("Route completed/rejected more than once")
+      }
+
+    private[testkit] def handleResponse(r: HttpResponse): Unit =
+      synchronized {
+        if (result.isEmpty) {
+          result = Some(Right(r))
           latch.countDown()
         } else failTest("Route completed/rejected more than once")
       }

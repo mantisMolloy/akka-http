@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.model
 
-import org.scalatest.WordSpec
+import org.scalatest.wordspec.AnyWordSpec
 
-class HttpMethodsSpec extends WordSpec {
+class HttpMethodsSpec extends AnyWordSpec {
   "HttpMethods.getForKeyCaseInsensitive()" must {
     "return HttpMethods.CONNECT" in {
       assert(HttpMethods.getForKeyCaseInsensitive("CONNECT") == Option(HttpMethods.CONNECT))

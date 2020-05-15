@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka
@@ -222,11 +222,11 @@ object ValidatePullRequest extends AutoPlugin {
           changedDirs,
           name.value,
           Seq(
-            graphFor((update in Compile).value, Compile),
-            graphFor((update in Test).value, Test),
-            graphFor((update in Runtime).value, Runtime),
-            graphFor((update in Provided).value, Provided),
-            graphFor((update in Optional).value, Optional)))(log)
+            graphFor((updateFull in Compile).value, Compile),
+            graphFor((updateFull in Test).value, Test),
+            graphFor((updateFull in Runtime).value, Runtime),
+            graphFor((updateFull in Provided).value, Provided),
+            graphFor((updateFull in Optional).value, Optional)))(log)
       }
 
       if (githubCommandEnforcedBuildAll.isDefined)
@@ -337,7 +337,19 @@ object AggregatePRValidation extends AutoPlugin {
 
       val (newState, result) = runAggregated(executePullRequestValidation in extracted.currentRef, state.value)
 
-      val allResults = result.toEither.right.get.flatMap(_.value.toEither.right.get).filterNot(_.key == null).sortBy(_.key.scope.project.toString)
+      implicit class AddBetterEitherError[T](val e: Either[sbt.Incomplete, T]) {
+        def getSafe: T = e match {
+          case Left(i) => throw new IllegalStateException(s"Was not Right but [$i]", i.directCause.getOrElse(null))
+          case Right(t) => t
+        }
+      }
+
+      val allResults =
+        result
+          .toEither.getSafe
+          .flatMap(_.value.toEither.getSafe)
+          .filterNot(_.key == null)
+          .sortBy(_.key.scope.project.toString)
 
       val onlyTestResults: Seq[KeyValue[Tests.Output]] = allResults collect {
         case KeyValue(key, Value(o: Tests.Output)) => KeyValue(key, o)
@@ -494,14 +506,13 @@ object MimaWithPrValidation extends AutoPlugin {
         // filters * found is n-squared, it's fixable in principle by special-casing known
         // filter types or something, not worth it most likely...
 
-        // version string "x.y.z" is converted to an Int tuple (x, y, z) for comparison
-        val versionOrdering = Ordering[(Int, Int, Int)].on { version: String =>
-          val ModuleVersion = """(\d+)\.(\d+)\.(.*)""".r
-          val ModuleVersion(epoch, major, minor) = version
-          val toNumeric = (revision: String) => Try(revision.filter(_.isDigit).toInt).getOrElse(0)
-          (toNumeric(epoch), toNumeric(major), toNumeric(minor))
+        val versionOrdering = {
+          // version string "x.y.z" is converted to an Int tuple (x, y, z) for comparison
+          val VersionRegex = """(\d+)\.?(\d+)?\.?(.*)?""".r
+          def int(versionPart: String) =
+            Try(versionPart.replace("x", Short.MaxValue.toString).filter(_.isDigit).toInt).getOrElse(0)
+          Ordering[(Int, Int, Int)].on[String] { case VersionRegex(x, y, z) => (int(x), int(y), int(z)) }
         }
-
         def isReported(module: ModuleID, verionedFilters: Map[String, Seq[core.ProblemFilter]])(problem: core.Problem) = (verionedFilters.collect {
           // get all filters that apply to given module version or any version after it
           case f @ (version, filters) if versionOrdering.gteq(version, module.revision) => filters

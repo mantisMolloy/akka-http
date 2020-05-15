@@ -28,48 +28,22 @@ On the other hand, if you prefer to build your applications with the guidance of
 ## Using Akka HTTP
 
 Akka HTTP is provided as independent modules from Akka itself under its own release cycle. Akka HTTP is @ref[compatible](compatibility-guidelines.md)
-with Akka 2.5 and any later 2.x versions released during the lifetime of Akka HTTP 10.1.x. The modules, however, do *not* depend on `akka-actor` or `akka-stream`, so the user is required to
+with Akka 2.5, Akka 2.6 and  any later 2.x versions released during the lifetime of Akka HTTP 10.2.x. The modules, however, do *not* depend on `akka-actor` or `akka-stream`, so the user is required to
 choose an Akka version to run against and add a manual dependency to `akka-stream` of the chosen version.
 
-sbt
-:   @@@vars
-    ```
-    "com.typesafe.akka" %% "akka-http"   % "$project.version$" $crossString$
-    "com.typesafe.akka" %% "akka-stream" % "$akka.version$" // or whatever the latest version is
-    ```
-    @@@
-
-Gradle
-:   @@@vars
-    ```
-    compile group: 'com.typesafe.akka', name: 'akka-http_$scala.binary_version$',   version: '$project.version$'
-    compile group: 'com.typesafe.akka', name: 'akka-stream_$scala.binary_version$', version: '$akka.version$'
-    ```
-    @@@
-
-Maven
-:   @@@vars
-    ```
-    <dependency>
-      <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-http_$scala.binary_version$</artifactId>
-      <version>$project.version$</version>
-    </dependency>
-    <dependency>
-      <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-stream_$scala.binary_version$</artifactId>
-      <version>$akka.version$</version> <!-- Or whatever the latest version is -->
-    </dependency>
-    ```
-    @@@
-
+@@dependency [sbt,Gradle,Maven] {
+  symbol1=AkkaVersion
+  value1=$akka.version$
+  group1="com.typesafe.akka" artifact1="akka-stream_$scala.binary.version$" version1=AkkaVersion
+  group2="com.typesafe.akka" artifact2="akka-http_$scala.binary.version$" version2="$project.version$"
+}
 
 Alternatively, you can bootstrap a new sbt project with Akka HTTP already
 configured using the [Giter8](http://www.foundweekends.org/giter8/) template:
 
 @@@ div { .group-scala }
 ```sh
-sbt -Dsbt.version=0.13.15 new https://github.com/akka/akka-http-quickstart-scala.g8
+sbt -Dsbt.version=1.2.8 new https://github.com/akka/akka-http-quickstart-scala.g8
 ```
 @@@
 @@@ div { .group-java }
@@ -95,11 +69,11 @@ will be sent back as a HTTP OK with the string as response body.
 
 The
 @scala[@scaladoc[Route](akka.http.scaladsl.server.index#Route=akka.http.scaladsl.server.RequestContext=%3Escala.concurrent.Future[akka.http.scaladsl.server.RouteResult])]
-@java[@javadoc[Route](akka.http.scaladsl.server.Route)]
+@java[@javadoc[Route](akka.http.javadsl.server.Route)]
 created using the Route DSL is then "bound" to a port to start serving HTTP requests:
 
 Scala
-:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #minimal-routing-example }
+:   @@snip [HttpServerRoutingMinimal.scala]($test$/scala/docs/http/scaladsl/HttpServerRoutingMinimal.scala)
 
 Java
 :   @@snip [HttpServerMinimalExampleTest.java]($test$/java/docs/http/javadsl/HttpServerMinimalExampleTest.java) { #minimal-routing-example }
@@ -144,7 +118,7 @@ this case shown by two separate routes. The first route queries an asynchronous 
 saves it to the database and replies with an OK when done.
 
 Scala
-:   @@snip [SprayJsonExampleSpec.scala]($test$/scala/docs/http/scaladsl/SprayJsonExampleSpec.scala) { #second-spray-json-example }
+:   @@snip [SprayJsonExample2.scala]($test$/scala/docs/http/scaladsl/SprayJsonExample2.scala)
 
 Java
 :   @@snip [JacksonExampleTest.java]($test$/java/docs/http/javadsl/JacksonExampleTest.java) { #second-jackson-example }
@@ -166,7 +140,7 @@ body.
 Example that streams random numbers as long as the client accepts them:
 
 Scala
-:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #stream-random-numbers }
+:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerStreamingRandomNumbers.scala)
 
 Java
 :   @@snip [HttpServerStreamRandomNumbersTest.java]($test$/java/docs/http/javadsl/HttpServerStreamRandomNumbersTest.java) { #stream-random-numbers }
@@ -180,12 +154,12 @@ style while the second route contains a request-response interaction with an act
 as json and returned when the response arrives from the actor.
 
 Scala
-:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #actor-interaction }
+:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerWithActorInteraction.scala)
 
 Java
 :   @@snip [HttpServerActorInteractionExample.java]($test$/java/docs/http/javadsl/HttpServerActorInteractionExample.java) { #actor-interaction }
 
-When you run this server, you can add an auction bid via `curl -X PUT http://localhost:8080/auction?bid=22&user=MartinO` on the terminal; and then you can view the auction status either in a browser, at the url [http://localhost:8080/auction](http://localhost:8080/auction), or, on the terminal, via `curl http://localhost:8080/auction`.
+When you run this server, you can add an auction bid via `curl -X PUT "http://localhost:8080/auction?bid=22&user=MartinO"` on the terminal; and then you can view the auction status either in a browser, at the url [http://localhost:8080/auction](http://localhost:8080/auction), or, on the terminal, via `curl http://localhost:8080/auction`.
 
 More details on how JSON marshalling and unmarshalling works can be found in the @ref[JSON Support section](common/json-support.md).
 
@@ -199,7 +173,7 @@ which is included automatically when you depend on `akka-http` but can also be u
 APIs for handling such request-responses as function calls and as a @apidoc[Flow[HttpRequest, HttpResponse, \_]] are available.
 
 Scala
-:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #low-level-server-example }
+:   @@snip [HttpServerLowLevel.scala]($test$/scala/docs/http/scaladsl/HttpServerLowLevel.scala)
 
 Java
 :   @@snip [HttpServerLowLevelExample.java]($test$/java/docs/http/javadsl/HttpServerLowLevelExample.java) { #low-level-server-example }
@@ -215,7 +189,7 @@ handled more performantly by re-using TCP connections to the server.
 Example simple request:
 
 Scala
-:   @@snip [HttpClientExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpClientExampleSpec.scala) { #single-request-example }
+:   @@snip [HttpClientExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpClientSingleRequest.scala)
 
 Java
 :   @@snip [ClientSingleRequestExample.java]($test$/java/docs/http/javadsl/ClientSingleRequestExample.java) { #single-request-example }

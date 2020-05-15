@@ -19,7 +19,7 @@ It's a simple alias for a function turning a @apidoc[RequestContext] into a `Fut
 A @scala[@scaladoc[Route](akka.http.scaladsl.server.index#Route=akka.http.scaladsl.server.RequestContext=%3Escala.concurrent.Future[akka.http.scaladsl.server.RouteResult])]@java[@apidoc[Route]] itself is a function that operates on a @apidoc[RequestContext] and returns a @apidoc[RouteResult]. The
 @apidoc[RequestContext] is a data structure that contains the current request and auxiliary data like the so far unmatched
 path of the request URI that gets passed through the route structure. It also contains the current `ExecutionContext`
-and `akka.stream.Materializer`, so that these don't have to be passed around manually.
+and @apidoc[Materializer], so that these don't have to be passed around manually.
 
 @@@
 
@@ -88,13 +88,13 @@ of either the incoming request, the outgoing response or both
  * Route filtering, which only lets requests satisfying a given filter condition pass and rejects all others
  * Route chaining, which tries a second route if a given first one was rejected
 
-The last point is achieved with the concatenation operator `~`, which is an extension method that becomes available
-when you `import akka.http.scaladsl.server.Directives._`.
 The first two points are provided by so-called @ref[Directives](directives/index.md#directives) of which a large number is already predefined by Akka
-HTTP and which you can also easily create yourself.
+HTTP and is extensible with user code.
+
+The last point is achieved with the `concat` method.
+
 @ref[Directives](directives/index.md#directives) deliver most of Akka HTTP's power and flexibility.
 
-<a id="the-routing-tree"></a>
 ## The Routing Tree
 
 Essentially, when you combine directives and custom routes via the `concat` method, you build a routing
@@ -165,6 +165,11 @@ specific cases up front and the most general cases in the back.
 
 ## Sealing a Route
 
+A sealed route has these properties:
+
+ * The result of the route will always be a complete response, i.e. the result of the future is a `Success(RouteResult.Complete(response))`, never a failed future and never a rejected route. 
+ * Consequently, no route alternatives will be tried that were combined with this route.
+
 As described in @ref[Rejections](rejections.md) and @ref[Exception Handling](exception-handling.md),
 there are generally two ways to handle rejections and exceptions.
 
@@ -179,7 +184,7 @@ and used for all rejections/exceptions that are not handled within the route str
 In application code, unlike @ref[test code](testkit.md#testing-sealed-routes), you don't need to use the `Route.seal()` method to seal a route.
 As long as you bring implicit rejection and/or exception handlers to the top-level scope, your route is sealed. 
 
-However, you can use `Route.seal()` to perform modification on HttpResponse from the route.
+However, you can use `Route.seal()` to perform modification on @apidoc[HttpResponse$] from the route.
 For example, if you want to add a special header, but still use the default rejection handler, then you can do the following.
 In the below case, the special header is added to rejected responses which did not match the route, as well as successful responses which matched the route.
 

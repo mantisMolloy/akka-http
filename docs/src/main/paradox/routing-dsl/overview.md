@@ -1,11 +1,11 @@
 # Routing DSL Overview
 
 The Akka HTTP @ref[Core Server API](../server-side/low-level-api.md) provides a @apidoc[Flow]- or `Function`-level interface that allows
-an application to respond to incoming HTTP requests by simply mapping requests to responses
+an application to respond to incoming HTTP requests by mapping requests to responses
 (excerpt from @ref[Low-level server side example](../server-side/low-level-api.md#http-low-level-server-side-example)):
 
 Scala
-:  @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #low-level-server-example }
+:  @@snip [HttpServerLowLevel.scala]($test$/scala/docs/http/scaladsl/HttpServerLowLevel.scala)
 
 Java
 :  @@snip [HttpServerExampleDocTest.java]($test$/java/docs/http/javadsl/server/HttpServerExampleDocTest.java) { #request-handler }
@@ -13,11 +13,11 @@ Java
 While it'd be perfectly possible to define a complete REST API service purely by @scala[pattern-matching against]@java[inspecting] the incoming
 @apidoc[HttpRequest] @scala[(maybe with the help of a few extractors in the way of [Unfiltered](https://unfiltered.ws/))] this approach becomes somewhat
 unwieldy for larger services due to the amount of syntax "ceremony" required. Also, it doesn't help in keeping your
-service definition as [DRY](http://en.wikipedia.org/wiki/Don%27t_repeat_yourself) as you might like.
+service definition as [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) as you might like.
 
 As an alternative Akka HTTP provides a flexible DSL for expressing your service behavior as a structure of
 composable elements (called @ref[Directives](directives/index.md)) in a concise and readable way. Directives are assembled into a so called
-*route structure* which, at its top-level, can be used to create a handler @apidoc[Flow] (or, alternatively, an async handler function) that
+*route structure* which, at its top-level, can be used to create a handler @apidoc[Flow] or async handler function that
 can be directly supplied to a `bind` call. @scala[The conversion from @scala[@scaladoc[Route](akka.http.scaladsl.server.index#Route=akka.http.scaladsl.server.RequestContext=%3Escala.concurrent.Future[akka.http.scaladsl.server.RouteResult])]@java[@apidoc[Route]] to flow can either be invoked explicitly
 using `Route.handlerFlow` or, otherwise, the conversion is also provided implicitly by
 `RouteResult.route2HandlerFlow` <a id="^1" href="#1">[1]</a>.]
@@ -25,7 +25,7 @@ using `Route.handlerFlow` or, otherwise, the conversion is also provided implici
 Here's the complete example rewritten using the composable high-level API:
 
 Scala
-:   @@snip [HttpServerExampleSpec.scala]($test$/scala/docs/http/scaladsl/HttpServerExampleSpec.scala) { #high-level-server-example }
+:   @@snip [HttpServerHighLevel.scala]($test$/scala/docs/http/scaladsl/HttpServerHighLevel.scala)
 
 Java
 :   @@snip [HighLevelServerExample.java]($test$/java/docs/http/javadsl/server/HighLevelServerExample.java) { #high-level-server-example }

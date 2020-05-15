@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.parsing
@@ -10,13 +10,15 @@ import scala.annotation.{ switch, tailrec }
 import akka.http.scaladsl.settings.{ ParserSettings, WebSocketSettings }
 import akka.util.{ ByteString, OptionVal }
 import akka.http.impl.engine.ws.Handshake
-import akka.http.impl.model.parser.CharacterClasses
+import akka.http.impl.model.parser.{ CharacterClasses, UriParser }
 import akka.http.scaladsl.model.{ ParsingException => _, _ }
 import headers._
 import StatusCodes._
 import ParserOutput._
 import akka.annotation.InternalApi
+import akka.http.impl.engine.server.HttpAttributes
 import akka.http.impl.util.ByteStringParserInput
+import akka.parboiled2.ParserInput
 import akka.stream.{ Attributes, FlowShape, Inlet, Outlet }
 import akka.stream.TLSProtocol.SessionBytes
 import akka.stream.stage.{ GraphStage, GraphStageLogic, InHandler, OutHandler }
@@ -47,6 +49,7 @@ private[http] final class HttpRequestParser(
 
     override val settings = self.settings
     override val headerParser = self.headerParser.createShallowCopy()
+    override val isResponseParser = false
 
     private[this] var method: HttpMethod = _
     private[this] var uri: Uri = _
@@ -101,7 +104,7 @@ private[http] final class HttpRequestParser(
         } else
           throw new ParsingException(
             BadRequest,
-            ErrorInfo("Unsupported HTTP method", s"HTTP method too long (started with '${sb.toString}'). " +
+            ErrorInfo("Unsupported HTTP method", s"HTTP method too long (started with '${sb.toString}')$remoteAddressStr. " +
               "Increase `akka.http.server.parsing.max-method-length` to support HTTP methods with more characters."))
 
       @tailrec def parseMethod(meth: HttpMethod, ix: Int = 1): Int =
@@ -130,11 +133,15 @@ private[http] final class HttpRequestParser(
         case 0x16 =>
           throw new ParsingException(
             BadRequest,
-            ErrorInfo("Unsupported HTTP method", s"The HTTP method started with 0x16 rather than any known HTTP method. " +
-              "Perhaps this was an HTTPS request sent to an HTTP endpoint?"))
+            ErrorInfo(
+              "Unsupported HTTP method",
+              s"The HTTP method started with 0x16 rather than any known HTTP method$remoteAddressStr. " +
+                "Perhaps this was an HTTPS request sent to an HTTP endpoint?"))
         case _ => parseCustomMethod()
       }
     }
+
+    val uriParser = new UriParser(null: ParserInput, uriParsingMode = uriParsingMode)
 
     def parseRequestTarget(input: ByteString, cursor: Int): Int = {
       val uriStart = cursor
@@ -145,20 +152,21 @@ private[http] final class HttpRequestParser(
         else if (CharacterClasses.WSPCRLF(input(ix).toChar)) ix
         else if (ix < uriEndLimit) findUriEnd(ix + 1)
         else throw new ParsingException(
-          RequestUriTooLong,
-          s"URI length exceeds the configured limit of $maxUriLength characters")
+          UriTooLong,
+          s"URI length exceeds the configured limit of $maxUriLength characters$remoteAddressStr")
 
       val uriEnd = findUriEnd()
       try {
         uriBytes = input.slice(uriStart, uriEnd)
-        uri = Uri.parseHttpRequestTarget(new ByteStringParserInput(uriBytes), mode = uriParsingMode)
+        uriParser.input = new ByteStringParserInput(uriBytes)
+        uri = uriParser.parseHttpRequestTarget()
       } catch {
         case IllegalUriException(info) => throw new ParsingException(BadRequest, info)
       }
       uriEnd + 1
     }
 
-    override def onBadProtocol(): Nothing = throw new ParsingException(HTTPVersionNotSupported)
+    override def onBadProtocol(): Nothing = throw new ParsingException(HttpVersionNotSupported)
 
     // http://tools.ietf.org/html/rfc7230#section-3.3
     override def parseEntity(headers: List[HttpHeader], protocol: HttpProtocol, input: ByteString, bodyStart: Int,
@@ -220,6 +228,11 @@ private[http] final class HttpRequestParser(
         }
       } else failMessageStart("Request is missing required `Host` header")
 
+    private def remoteAddressStr: String =
+      inheritedAttributes.get[HttpAttributes.RemoteAddress].map(_.address) match {
+        case Some(addr) => s" from ${addr.getHostString}:${addr.getPort}"
+        case None       => ""
+      }
   }
 
   override def toString: String = "HttpRequestParser"

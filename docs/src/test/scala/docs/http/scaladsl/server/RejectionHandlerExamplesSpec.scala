@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl.server
@@ -13,7 +13,6 @@ object MyRejectionHandler {
 
   //#custom-handler-example
   import akka.actor.ActorSystem
-  import akka.stream.ActorMaterializer
   import akka.http.scaladsl.Http
   import akka.http.scaladsl.model._
   import akka.http.scaladsl.server._
@@ -43,7 +42,6 @@ object MyRejectionHandler {
         .result()
 
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
 
     val route: Route =
       // ... some route structure
@@ -108,7 +106,7 @@ class RejectionHandlerExamplesSpec extends RoutingSpec with CompileOnlySpec {
 
             // we copy the response in order to keep all headers and status code, wrapping the message as hand rolled JSON
             // you could the entity using your favourite marshalling library (e.g. spray json or anything else)
-            res.copy(entity = HttpEntity(ContentTypes.`application/json`, s"""{"rejection": "$message"}"""))
+            res.withEntity(HttpEntity(ContentTypes.`application/json`, s"""{"rejection": "$message"}"""))
 
           case x => x // pass through all other types of responses
         }
@@ -142,7 +140,7 @@ class RejectionHandlerExamplesSpec extends RoutingSpec with CompileOnlySpec {
 
             // we copy the response in order to keep all headers and status code, wrapping the message as hand rolled JSON
             // you could the entity using your favourite marshalling library (e.g. spray json or anything else)
-            res.copy(entity = HttpEntity(ContentTypes.`application/json`, s"""{"rejection": "$message"}"""))
+            res.withEntity(HttpEntity(ContentTypes.`application/json`, s"""{"rejection": "$message"}"""))
 
           case x => x // pass through all other types of responses
         }

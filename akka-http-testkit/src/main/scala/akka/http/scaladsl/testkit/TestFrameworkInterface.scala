@@ -1,18 +1,21 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.testkit
 
+import akka.http.scaladsl.server.ExceptionHandler
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.{ BeforeAndAfterAll, Suite }
 
 //#source-quote
 trait TestFrameworkInterface {
 
-  def cleanUp()
+  def cleanUp(): Unit
 
   def failTest(msg: String): Nothing
+
+  def testExceptionHandler: ExceptionHandler
 }
 //#source-quote
 
@@ -27,6 +30,10 @@ object TestFrameworkInterface {
       cleanUp()
       super.afterAll()
     }
+
+    override val testExceptionHandler = ExceptionHandler {
+      case e: org.scalatest.exceptions.TestFailedException => throw e
+    }
   }
 }
 
@@ -38,5 +45,9 @@ object Specs2FrameworkInterface {
     def failTest(msg: String): Nothing = throw new FailureException(Failure(msg))
 
     override def afterAll(): Unit = cleanUp()
+
+    override val testExceptionHandler = ExceptionHandler {
+      case e: org.specs2.execute.FailureException => throw e
+    }
   }
 }

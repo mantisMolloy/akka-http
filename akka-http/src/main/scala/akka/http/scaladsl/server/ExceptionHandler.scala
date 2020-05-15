@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -8,6 +8,7 @@ import scala.util.control.NonFatal
 import akka.http.scaladsl.settings.RoutingSettings
 import akka.http.scaladsl.model._
 import StatusCodes._
+import scala.language.implicitConversions
 
 trait ExceptionHandler extends ExceptionHandler.PF {
 
@@ -52,9 +53,9 @@ object ExceptionHandler {
         ctx.complete((status, info.format(settings.verboseErrorMessages)))
       }
       case e: EntityStreamSizeException => ctx => {
-        ctx.log.error(e, ErrorMessageTemplate, e, RequestEntityTooLarge)
+        ctx.log.error(e, ErrorMessageTemplate, e, PayloadTooLarge)
         ctx.request.discardEntityBytes(ctx.materializer)
-        ctx.complete((RequestEntityTooLarge, e.getMessage))
+        ctx.complete((PayloadTooLarge, e.getMessage))
       }
       case e: ExceptionWithErrorInfo => ctx => {
         ctx.log.error(e, ErrorMessageTemplate, e.info.formatPretty, InternalServerError)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.h2spec
@@ -15,6 +15,7 @@ import akka.stream.ActorMaterializer
 import akka.testkit._
 import org.scalatest.concurrent.ScalaFutures
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.sys.process._
 
@@ -33,7 +34,7 @@ class H2SpecIntegrationSpec extends AkkaSpec(
      }
   """) with Directives with ScalaFutures with WithLogCapturing {
 
-  import system.dispatcher
+  implicit val ec: ExecutionContext = system.dispatcher
   implicit val mat = ActorMaterializer()
 
   override def expectedTestDuration = 5.minutes // because slow jenkins, generally finishes below 1 or 2 minutes

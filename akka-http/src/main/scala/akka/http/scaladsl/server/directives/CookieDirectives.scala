@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -56,7 +56,7 @@ trait CookieDirectives {
    */
   def deleteCookie(first: HttpCookie, more: HttpCookie*): Directive0 =
     respondWithHeaders((first :: more.toList).map { c =>
-      `Set-Cookie`(c.copy(value = "deleted", expires = Some(DateTime.MinValue)))
+      `Set-Cookie`(c.withValue("deleted").withExpires(DateTime.MinValue))
     })
 
   /**

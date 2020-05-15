@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.settings
@@ -63,6 +63,9 @@ object ParserSettingsImpl extends SettingsCompanionImpl[ParserSettingsImpl]("akk
   private[this] val noCustomMethods: String => Option[HttpMethod] = ConstantFun.scalaAnyToNone
   private[this] val noCustomStatusCodes: Int => Option[StatusCode] = ConstantFun.scalaAnyToNone
   private[ParserSettingsImpl] val noCustomMediaTypes: (String, String) => Option[MediaType] = ConstantFun.scalaAnyTwoToNone
+
+  def forServer(root: Config): ParserSettingsImpl =
+    fromSubConfig(root, root.getConfig("akka.http.server.parsing"))
 
   def fromSubConfig(root: Config, inner: Config): ParserSettingsImpl = {
     val c = inner.withFallback(root.getConfig(prefix))

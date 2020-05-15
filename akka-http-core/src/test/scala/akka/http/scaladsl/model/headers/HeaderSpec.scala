@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.model.headers
@@ -9,8 +9,10 @@ import org.scalatest._
 import java.net.InetAddress
 
 import akka.http.scaladsl.model.{ headers, _ }
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class HeaderSpec extends FreeSpec with Matchers {
+class HeaderSpec extends AnyFreeSpec with Matchers {
   "ModeledCompanion should" - {
     "provide parseFromValueString method" - {
       "successful parse run" in {

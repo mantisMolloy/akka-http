@@ -9,13 +9,11 @@ route logic easy and convenient. This "route test DSL" is made available with th
 To use Akka HTTP TestKit, add the module to your project:
 
 @@dependency [sbt,Gradle,Maven] {
-  group="com.typesafe.akka" artifact="akka-stream-testkit_$scala.binary.version$" version="$akka.version$"
+  symbol1=AkkaVersion
+  value1=$akka.version$
+  group1="com.typesafe.akka" artifact1="akka-stream-testkit_$scala.binary.version$" version1=AkkaVersion
   group2="com.typesafe.akka" artifact2="akka-http-testkit_$scala.binary.version$" version2="$project.version$"
 }
-
-@@@ note
-Since version `10.1.6`, `akka-stream-testkit` is a provided dependency, please remember to add it to your build dependencies.
-@@@
 
 ## Usage
 
@@ -205,7 +203,7 @@ Java
 The timeouts you consciously defined on your lightning fast development environment might be too tight for your, most
 probably, high-loaded Continuous Integration server, invariably causing spurious failures. To account for such
 situations, timeout durations can be scaled by a given factor on such environments. Check the
-@scala[@extref[Akka Docs](akka-docs:scala/testing.html#accounting-for-slow-test-systems)]@java[@extref[Akka Docs](akka-docs:java/testing.html#accounting-for-slow-test-systems)]
+@extref[Akka Docs](akka-docs:testing.html#accounting-for-slow-test-systems)
 for further information.
 
 
@@ -221,6 +219,23 @@ Java
 :   @@snip [WithTimeoutTest.java]($test$/java/docs/http/javadsl/server/testkit/WithTimeoutTest.java) { #timeout-setting }
 
 Remember to configure the timeout using `dilated` if you want to account for slow test systems.
+
+## Integration Testing Routes
+
+Use `~!>` to test a route running in full HTTP server mode:
+```
+REQUEST ~!> ROUTE ~> check {
+  ASSERTIONS
+}
+```
+
+Certain routes can only be tested with `~!>`, for example routes that use
+the `withRequestTimeout` directive.
+
+@@@ note
+Using `~!>` adds considerable extra overhead since each test will start
+a server and bind to a port so use it only when necessary.
+@@@
 
 ## Examples
 

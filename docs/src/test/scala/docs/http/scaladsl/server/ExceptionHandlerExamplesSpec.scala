@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl.server
@@ -7,6 +7,7 @@ package docs.http.scaladsl.server
 import akka.http.scaladsl.server.ExceptionHandler
 import akka.http.scaladsl.server.RoutingSpec
 import docs.CompileOnlySpec
+import com.github.ghik.silencer.silent
 
 // format: OFF
 
@@ -19,7 +20,6 @@ object MyExplicitExceptionHandler {
   import StatusCodes._
   import akka.http.scaladsl.server._
   import Directives._
-  import akka.stream.ActorMaterializer
 
   val myExceptionHandler = ExceptionHandler {
     case _: ArithmeticException =>
@@ -32,7 +32,6 @@ object MyExplicitExceptionHandler {
   object MyApp extends App {
 
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
 
     val route: Route =
       handleExceptions(myExceptionHandler) {
@@ -55,7 +54,6 @@ object MyImplicitExceptionHandler {
   import StatusCodes._
   import akka.http.scaladsl.server._
   import Directives._
-  import akka.stream.ActorMaterializer
 
   implicit def myExceptionHandler: ExceptionHandler =
     ExceptionHandler {
@@ -69,7 +67,6 @@ object MyImplicitExceptionHandler {
   object MyApp extends App {
 
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
 
     val route: Route =
     // ... some route structure
@@ -81,6 +78,7 @@ object MyImplicitExceptionHandler {
   //#implicit-handler-example
 }
 
+@silent("Evaluation of a constant expression results in an arithmetic error")
 object ExceptionHandlerInSealExample {
   //#seal-handler-example
   import akka.http.scaladsl.model.HttpResponse
@@ -109,6 +107,7 @@ object ExceptionHandlerInSealExample {
   //#seal-handler-example
 }
 
+@silent("Evaluation of a constant expression results in an arithmetic error")
 object RespondWithHeaderExceptionHandlerExample {
   //#respond-with-header-exceptionhandler-example
   import akka.actor.ActorSystem
@@ -118,7 +117,6 @@ object RespondWithHeaderExceptionHandlerExample {
   import akka.http.scaladsl.server._
   import Directives._
   import akka.http.scaladsl.Http
-  import akka.stream.ActorMaterializer
   import RespondWithHeaderExceptionHandler.route
 
 
@@ -153,14 +151,13 @@ object RespondWithHeaderExceptionHandlerExample {
 
   object MyApp extends App {
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
 
     Http().bindAndHandle(route, "localhost", 8080)
   }
   //#respond-with-header-exceptionhandler-example
 }
 
-
+@silent("Evaluation of a constant expression results in an arithmetic error")
 class ExceptionHandlerExamplesSpec extends RoutingSpec with CompileOnlySpec {
 
   "test explicit example" in {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.engine.client.pool
@@ -133,7 +133,7 @@ private[client] object NewHostConnectionPool {
             // don't increase if the embargo level has already changed since the start of the connection attempt
           }
           if (_connectionEmbargo != oldValue) {
-            log.warning(s"Connection attempt failed. Backing off new connection attempts for at least ${_connectionEmbargo}.")
+            log.debug(s"Connection attempt failed. Backing off new connection attempts for at least ${_connectionEmbargo}.")
             slots.foreach(_.onNewConnectionEmbargo(_connectionEmbargo))
           }
         }
@@ -194,7 +194,13 @@ private[client] object NewHostConnectionPool {
           def isIdle: Boolean = state.isIdle
           def isConnected: Boolean = state.isConnected
           def shutdown(): Unit = {
-            closeConnection(Some(new IllegalStateException("Pool slot was shut down") with NoStackTrace))
+            // if the connection is idle, we just complete it regularly, otherwise, we forcibly tear it down
+            // with an error (which will be logged in OutgoingConnectionBlueprint, see `mapError` there).
+            val reason =
+              if (isIdle) None
+              else Some(new IllegalStateException("Pool slot was shut down") with NoStackTrace)
+
+            closeConnection(reason)
 
             state.onShutdown(this)
           }
@@ -251,6 +257,7 @@ private[client] object NewHostConnectionPool {
 
                 debug(s"Before event [${event.name}] In state [${state.name}] for [${timeInState / 1000000} ms]")
                 state = event.transition(state, this, arg)
+                require(state != Unconnected, "Slot must not change to Unconnected state") // Use ToBeClosed or Failed instead from state impls
                 debug(s"After event [${event.name}] State change [${previousState.name}] -> [${state.name}]")
 
                 state.stateTimeout match {
@@ -505,11 +512,14 @@ private[client] object NewHostConnectionPool {
               slot.onConnectionCompleted()
             }
           override def onUpstreamFailure(ex: Throwable): Unit =
-            if (connectionEstablished)
-              withSlot { slot =>
+            withSlot { slot =>
+              if (connectionEstablished) {
                 slot.debug("Connection failed")
                 slot.onConnectionFailed(ex)
               }
+              // otherwise, rely on connection.onComplete to fail below
+              // (connection error is sent through matValue future and through the stream)
+            }
 
           def onPull(): Unit = () // emitRequests makes sure not to push too early
 

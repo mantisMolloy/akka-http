@@ -1,12 +1,11 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.impl.model.parser
 
 import akka.http.scaladsl.settings.ParserSettings.CookieParsingMode
 import akka.http.impl.model.parser.HeaderParser.Settings
-import org.scalatest.{ FreeSpec, Matchers }
 import org.scalatest.matchers.{ MatchResult, Matcher }
 import akka.http.impl.util._
 import akka.http.scaladsl.model._
@@ -21,8 +20,10 @@ import java.net.InetAddress
 
 import akka.http.scaladsl.model.MediaType.WithOpenCharset
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
-class HttpHeaderSpec extends FreeSpec with Matchers {
+class HttpHeaderSpec extends AnyFreeSpec with Matchers {
   val `application/vnd.spray` = MediaType.applicationBinary("vnd.spray", MediaType.Compressible)
   val PROPFIND = HttpMethod.custom("PROPFIND")
 
@@ -222,6 +223,8 @@ class HttpHeaderSpec extends FreeSpec with Matchers {
       "Content-Type: application/json" =!=
         `Content-Type`(`application/json`)
       "Content-Type: text/plain; charset=utf8" =!=
+        `Content-Type`(ContentType(`text/plain`, `UTF-8`)).renderedTo("text/plain; charset=UTF-8")
+      "Content-Type: text/plain; Charset=utf8" =!=
         `Content-Type`(ContentType(`text/plain`, `UTF-8`)).renderedTo("text/plain; charset=UTF-8")
       "Content-Type: text/plain" =!=
         `Content-Type`(ContentType.WithMissingCharset(MediaTypes.`text/plain`)).renderedTo("text/plain")
@@ -509,6 +512,27 @@ class HttpHeaderSpec extends FreeSpec with Matchers {
         `Set-Cookie`(HttpCookie("foo", "bar", domain = Some("example.com"), path = Some("/this is a path with blanks"),
           extension = Some("extension with blanks"))).renderedTo(
           "foo=bar; Domain=example.com; Path=/this is a path with blanks; extension with blanks")
+
+      // SameSite values
+      "Set-Cookie: name=123; SameSite=Lax" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite.Lax))
+      "Set-Cookie: name=123; SameSite=Strict" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite.Strict))
+      "Set-Cookie: name=123; SameSite=None" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite.None))
+      "Set-Cookie: name=123" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(None))
+      "Set-Cookie: name=123; SameSite=sTRIct" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite.Strict)).renderedTo("name=123; SameSite=Strict")
+      "Set-Cookie: name=123; SameSite=lAX" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite.Lax)).renderedTo("name=123; SameSite=Lax")
+      "Set-Cookie: name=123; SameSite=NONE" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite.None)).renderedTo("name=123; SameSite=None")
+      "Set-Cookie: name=123; SameSite=Wrong" =!=
+        ErrorInfo(
+          "Illegal HTTP header 'Set-Cookie': Invalid input 'W', expected OWS or same-site-value (line 1, column 20)", "name=123; SameSite=Wrong\n                   ^")
+      "Set-Cookie: name=123" =!=
+        `Set-Cookie`(HttpCookie("name", "123").withSameSite(SameSite("Wrong"))).renderedTo("name=123")
 
       // test all weekdays
       "Set-Cookie: lang=; Expires=Sun, 07 Dec 2014 00:42:55 GMT; Max-Age=12345" =!=

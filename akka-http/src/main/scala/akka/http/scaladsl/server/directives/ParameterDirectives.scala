@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.scaladsl.server
@@ -43,11 +43,6 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements {
    * Extracts a query parameter value from the request.
    * Rejects the request if the defined query parameter matcher(s) don't match.
    *
-   * Due to a bug in Scala 2.10, invocations of this method sometimes fail to compile with an
-   * "too many arguments for method parameter" or "type mismatch" error.
-   *
-   * As a workaround add an `import ParameterDirectives.ParamMagnet` or use Scala 2.11.x.
-   *
    * @group param
    */
   def parameter(pdm: ParamMagnet): pdm.Out = pdm()
@@ -55,11 +50,6 @@ trait ParameterDirectives extends ToNameReceptacleEnhancements {
   /**
    * Extracts a number of query parameter values from the request.
    * Rejects the request if the defined query parameter matcher(s) don't match.
-   *
-   * Due to a bug in Scala 2.10, invocations of this method sometimes fail to compile with an
-   * "too many arguments for method parameters" or "type mismatch" error.
-   *
-   * As a workaround add an `import ParameterDirectives.ParamMagnet` or use Scala 2.11.x.
    *
    * @group param
    */

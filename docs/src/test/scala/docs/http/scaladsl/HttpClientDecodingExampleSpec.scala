@@ -1,11 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.http.scaladsl
 
 import docs.CompileOnlySpec
 import org.scalatest.concurrent.ScalaFutures
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import akka.testkit.AkkaSpec
 
@@ -16,13 +17,11 @@ class HttpClientDecodingExampleSpec extends AkkaSpec with CompileOnlySpec with S
     import akka.http.scaladsl.Http
     import akka.http.scaladsl.coding.{ Gzip, Deflate, NoCoding }
     import akka.http.scaladsl.model._, headers.HttpEncodings
-    import akka.stream.ActorMaterializer
 
     import scala.concurrent.Future
 
     implicit val system = ActorSystem()
-    implicit val materializer = ActorMaterializer()
-    import system.dispatcher
+    implicit val ec: ExecutionContext = system.dispatcher
 
     val http = Http()
 
@@ -39,6 +38,9 @@ class HttpClientDecodingExampleSpec extends AkkaSpec with CompileOnlySpec with S
         case HttpEncodings.deflate =>
           Deflate
         case HttpEncodings.identity =>
+          NoCoding
+        case other =>
+          log.warning(s"Unknown encoding [$other], not decoding")
           NoCoding
       }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.http.javadsl.server.directives;
@@ -88,7 +88,7 @@ public class MiscDirectivesTest extends JUnitRouteTest {
 
     route
       .run(withEntityOfSize(501))
-      .assertStatusCode(StatusCodes.REQUEST_ENTITY_TOO_LARGE);
+      .assertStatusCode(StatusCodes.PAYLOAD_TOO_LARGE);
 
   }
 
